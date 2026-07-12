@@ -1,0 +1,12 @@
+# This file is a "do NOT pack" list for git.
+# Anything written here stays on YOUR computer and never goes to GitHub —
+# because it's junk the computer can remake anytime.
+
+__pycache__/   # Python's scratch paper (it redraws this whenever it wants)
+*.pyc          # More Python scratch paper
+build/         # PyInstaller's messy workbench while building the app
+dist/          # The finished app files (too big for git — we share these
+               # through GitHub Releases instead)
+*.spec         # PyInstaller's recipe notes (it rewrites these each build)
+.venv/         # A private toy box of Python packages (everyone makes their own)
+venv/          # Same thing, different name

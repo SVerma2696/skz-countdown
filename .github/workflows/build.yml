@@ -1,0 +1,93 @@
+# ============================================================
+#  This file is a recipe for GitHub's robot kitchen.
+#
+#  When you push a version tag (like v1.0.0), GitHub borrows
+#  three computers — a Windows one, a Mac one, and a Linux one —
+#  builds the app on each, and puts all three finished apps on
+#  your Releases page. You never need to own a Mac!
+# ============================================================
+name: Build SKZ Countdown
+
+# WHEN does the robot start cooking?
+on:
+  push:
+    tags: ["v*"]        # ...whenever you push a tag starting with "v"
+  workflow_dispatch:    # ...or when you press "Run workflow" by hand
+
+# The recipes. Each "job" runs on its own borrowed computer.
+jobs:
+
+  # ---------- Recipe 1: bake the Windows app ----------
+  build-windows:
+    runs-on: windows-latest              # Borrow a Windows computer
+    steps:
+      - uses: actions/checkout@v4        # Copy our code onto it
+      - uses: actions/setup-python@v5    # Install Python on it
+        with:
+          python-version: "3.12"
+      - name: Install dependencies      # Go shopping for our toys
+        run: pip install -r requirements.txt pyinstaller
+      - name: Build .exe                 # Squish everything into one .exe
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --collect-all customtkinter skz_countdown.py
+      - uses: actions/upload-artifact@v4 # Put the finished .exe on a shelf
+        with:
+          name: SKZ-Countdown-Windows
+          path: dist/SKZ-Countdown.exe
+
+  # ---------- Recipe 2: bake the Mac app ----------
+  build-macos:
+    runs-on: macos-latest                # Borrow a Mac
+    steps:
+      - uses: actions/checkout@v4        # Copy our code onto it
+      - uses: actions/setup-python@v5    # Install Python on it
+        with:
+          python-version: "3.12"
+      - name: Install dependencies      # Go shopping for our toys
+        run: pip3 install -r requirements.txt pyinstaller
+      - name: Build .app                 # Squish everything into a Mac app
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --collect-all customtkinter skz_countdown.py
+      - name: Zip the .app bundle        # Mac apps are folders — zip to share
+        run: cd dist && zip -r SKZ-Countdown-macOS.zip "SKZ-Countdown.app"
+      - uses: actions/upload-artifact@v4 # Put the zip on the shelf
+        with:
+          name: SKZ-Countdown-macOS
+          path: dist/SKZ-Countdown-macOS.zip
+
+  # ---------- Recipe 3: bake the Linux app ----------
+  build-linux:
+    runs-on: ubuntu-latest               # Borrow a Linux computer
+    steps:
+      - uses: actions/checkout@v4        # Copy our code onto it
+      - uses: actions/setup-python@v5    # Install Python on it
+        with:
+          python-version: "3.12"
+      - name: Install dependencies      # Go shopping for our toys
+        run: pip3 install -r requirements.txt pyinstaller
+      - name: Build binary               # Squish everything into one file
+        run: pyinstaller --onefile --windowed --name "skz-countdown" --collect-all customtkinter skz_countdown.py
+      - uses: actions/upload-artifact@v4 # Put it on the shelf
+        with:
+          name: SKZ-Countdown-Linux
+          path: dist/skz-countdown
+
+  # ---------- Recipe 4: set the table ----------
+  # Wait for all three apps to finish baking, then place them
+  # neatly on the Releases page for everyone to download.
+  release:
+    needs: [build-windows, build-macos, build-linux]   # Wait for all 3
+    if: startsWith(github.ref, 'refs/tags/')           # Only for real tags
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write        # Permission slip: allowed to create a Release
+    steps:
+      - uses: actions/download-artifact@v4   # Grab all 3 apps off the shelf
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create release with all binaries
+        uses: softprops/action-gh-release@v2  # Publish them to Releases
+        with:
+          files: |
+            artifacts/SKZ-Countdown.exe
+            artifacts/SKZ-Countdown-macOS.zip
+            artifacts/skz-countdown
