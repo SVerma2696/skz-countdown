@@ -11,8 +11,13 @@ pip install -r requirements.txt pyinstaller
 REM Step 2: Squish everything into ONE file.
 REM   --onefile  = one single .exe instead of a big messy folder
 REM   --windowed = no scary black text window when the app opens
+REM   --icon     = use our Stray Kids picture as the .exe's own icon
+REM   --add-data = pack our two logo pictures inside the .exe
 REM   --collect-all customtkinter = pack ALL of customtkinter's art supplies
 pyinstaller --onefile --windowed --name "SKZ Countdown" ^
+  --icon "skz-logo.ico" ^
+  --add-data "skz-logo.jpg;." ^
+  --add-data "t&t-logo.png;." ^
   --collect-all customtkinter skz_countdown.py
 
 echo Done! Your app is at dist\"SKZ Countdown.exe"

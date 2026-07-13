@@ -18,6 +18,7 @@ import shlex         # helps write safe commands for Linux
 import subprocess    # lets us run other programs (like notifications)
 import sys           # tells us which operating system we're on
 import threading     # lets us do two things at once
+import webbrowser    # lets us open a web page, like our GitHub repo
 from datetime import datetime, timezone   # tools for working with time
 from zoneinfo import ZoneInfo              # tools for time zones
 
@@ -31,6 +32,14 @@ try:
 except ImportError:
     PLYER_AVAILABLE = False
 
+# Try to grab the "drawing pictures" toolbox (Pillow). We use it to show
+# our two logo pictures and to set the little window icon.
+try:
+    from PIL import Image, ImageDraw, ImageTk
+    PIL_AVAILABLE = True
+except ImportError:
+    PIL_AVAILABLE = False
+
 # Which computer are we running on? Only one of these will be True.
 IS_WINDOWS = sys.platform == "win32"
 IS_MACOS = sys.platform == "darwin"
@@ -41,10 +50,9 @@ IS_LINUX = sys.platform.startswith("linux")
 # because the tray toolbox and the window toolbox fight over
 # who gets to be in charge on a Mac.
 TRAY_AVAILABLE = False
-if not IS_MACOS:
+if not IS_MACOS and PIL_AVAILABLE:
     try:
-        import pystray                    # draws the tray icon
-        from PIL import Image, ImageDraw  # draws the picture FOR the icon
+        import pystray   # draws the tray icon
         TRAY_AVAILABLE = True
     except ImportError:
         pass  # no tray toolbox? That's okay, the app still works.
@@ -54,6 +62,11 @@ if not IS_MACOS:
 APP_NAME = "SKZ Countdown"
 APP_ID = "skz-countdown"
 ALBUM_NAME = 'Stray Kids — "This & That"'
+REPO_URL = "https://github.com/SVerma2696/skz-countdown"  # our home on GitHub
+
+# The two picture files that live right next to this script.
+SKZ_LOGO_FILE = "skz-logo.jpg"   # the Stray Kids photo (window icon + header)
+TT_LOGO_FILE = "t&t-logo.png"    # the "This & That" title picture
 
 # THE moment everything counts down to:
 # August 7, 2026 at 1:00 PM in Korea (where the album releases).
@@ -85,15 +98,38 @@ MILESTONES = [
 ]
 
 # The colors we paint with (written as computer color codes).
+# We picked black, white, and red on purpose — it's Stray Kids' red, and
+# the mix makes the app feel like a sleek, clean control panel.
 ACCENT = "#E4002B"        # Stray Kids red
 ACCENT_HOVER = "#FF2E4F"  # a lighter red for when the mouse hovers
-BG_CARD = "#1b1b1f"       # dark gray for boxes
-FG_DIM = "#9a9aa2"        # soft gray for small text
+BG_MAIN = "#FFFFFF"       # crisp white window background
+BG_CARD = "#F7F7F9"       # the faintest hint of gray, so boxes stand out
+                          # against the white page behind them
+FG_DIM = "#6b6b76"        # medium gray for small text (readable on white)
+FG_STRONG = "#141416"     # near-black for text that should pop off the page
+CHIP_DARK = "#141416"     # near-black for our two outlined "chip" buttons
+CHIP_TEXT = "#FFFFFF"     # their white text/outline, always — the chips are
+                          # dark no matter which theme the rest of the page uses
+
+# A typewriter-style font makes the numbers feel like a digital readout.
+# If a computer doesn't have this exact font, it just falls back quietly.
+MONO_FONT = "Consolas" if IS_WINDOWS else "Menlo" if IS_MACOS else "monospace"
 
 # How often to look at the clock (in milliseconds).
 TICK_VISIBLE_MS = 1000    # window open: every 1 second (so seconds tick)
 TICK_HIDDEN_MS = 15000    # window hidden: every 15 seconds (saves work,
                           # because nobody can see the seconds anyway)
+
+
+def resource_path(filename):
+    """Find a file we bundled with the app, like a logo picture.
+
+    When PyInstaller packs us into one .exe/.app, it unzips extra files
+    into a secret temporary folder named in sys._MEIPASS. When we're just
+    a plain .py script, the file is simply sitting right next to us.
+    """
+    base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+    return os.path.join(base, filename)
 
 # ---------------- Saving and loading settings ----------------
 
@@ -249,16 +285,56 @@ def _applescript_escape(s):
     return s.replace("\\", "\\\\").replace('"', '\\"')
 
 
+def _powershell_escape(s):
+    """Make text safe to put inside a PowerShell double-quoted string."""
+    return s.replace("`", "``").replace('"', '`"').replace("$", "`$")
+
+
+def _windows_toast(title, message):
+    """Ask Windows 10/11 directly to show a real toast notification.
+
+    Windows' older "balloon tip" trick (what the plyer toolbox uses) often
+    shows nothing at all on modern Windows — and doesn't tell us it failed!
+    So on Windows we ask the operating system for a real toast ourselves,
+    the same way we ask macOS and Linux directly further down.
+    """
+    script = f"""
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
+[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
+$template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$textNodes = $template.GetElementsByTagName("text")
+$textNodes.Item(0).AppendChild($template.CreateTextNode("{_powershell_escape(title)}")) | Out-Null
+$textNodes.Item(1).AppendChild($template.CreateTextNode("{_powershell_escape(message)}")) | Out-Null
+$toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("{_powershell_escape(APP_NAME)}").Show($toast)
+"""
+    result = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive",
+         "-WindowStyle", "Hidden", "-Command", script],
+        check=False, capture_output=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError("PowerShell toast failed")
+
+
 def send_notification(title, message):
     """Show a little pop-up message in the corner of the screen.
 
     We do it on a helper thread so the window never freezes while
-    the notification is being delivered.
-    Plan A: the plyer toolbox. Plan B: the OS's own built-in way.
+    the notification is being delivered. Each operating system gets
+    the plan most likely to actually work for IT:
+      Windows: a real Windows toast first, plyer as backup.
+      macOS / Linux: the plyer toolbox first, the OS's own tool as backup.
     """
 
     def _worker():
-        # Plan A: plyer (works on all three systems, usually)
+        if IS_WINDOWS:
+            try:
+                _windows_toast(title, message)
+                return  # it worked, we're done
+            except Exception:
+                pass  # didn't work — fall through to plyer below
+
         if PLYER_AVAILABLE:
             try:
                 plyer_notification.notify(
@@ -267,8 +343,9 @@ def send_notification(title, message):
                 )
                 return  # it worked, we're done
             except Exception:
-                pass  # didn't work — try Plan B below
-        # Plan B: ask the operating system directly
+                pass  # didn't work — try the OS's own way below
+
+        # Last resort: ask the operating system directly.
         try:
             if IS_MACOS:
                 script = (
@@ -305,13 +382,15 @@ class CountdownApp(ctk.CTk):
         self.title(APP_NAME)
         self.geometry("660x640")       # starting window size
         self.minsize(580, 580)         # don't let it shrink smaller than this
-        ctk.set_appearance_mode("dark")
+        ctk.set_appearance_mode("light")
+        self.configure(fg_color=BG_MAIN)   # paint the window white
 
         # MEMORY SAVER: make our fonts ONCE and reuse them forever.
         # (Making a new font every second would slowly eat RAM.)
         self._font_status = ctk.CTkFont(size=14)
         self._font_celebrate = ctk.CTkFont(size=18, weight="bold")
 
+        self._load_logos()   # open our two picture files, if we can
         self._build_ui()   # draw all the labels, boxes, and buttons
 
         # When the user clicks the X, run OUR function instead of quitting.
@@ -329,6 +408,61 @@ class CountdownApp(ctk.CTk):
 
         self._tick()   # start the clock ticking!
 
+    # ---------- Loading our two picture files ----------
+
+    def _load_logos(self):
+        """Open the Stray Kids photo and the "This & That" title picture.
+
+        If Pillow isn't installed, or a picture file is missing, we just
+        skip the pictures — the app still works, it just shows plain text
+        instead of the missing image.
+        """
+        self.skz_logo_image = None   # the round Stray Kids photo (header)
+        self.tt_logo_image = None    # the "This & That" title picture
+        if not PIL_AVAILABLE:
+            return
+
+        try:
+            skz_pic = Image.open(resource_path(SKZ_LOGO_FILE))
+            self.skz_logo_image = ctk.CTkImage(
+                light_image=skz_pic, dark_image=skz_pic, size=(72, 72))
+            # The taskbar/title-bar icon needs a plain Tk picture, not the
+            # fancier CTkImage we use inside the window.
+            self._icon_photo = ImageTk.PhotoImage(skz_pic)
+            self.iconphoto(True, self._icon_photo)
+
+            if IS_WINDOWS:
+                # customtkinter secretly swaps the titlebar icon back to
+                # its own logo a moment after startup — UNLESS we've
+                # already called iconbitmap ourselves. So we turn our
+                # picture into a tiny .ico file and set that too.
+                ico_path = os.path.join(_cfg_dir, "skz_countdown_icon.ico")
+                skz_pic.save(
+                    ico_path, format="ICO",
+                    sizes=[(256, 256), (64, 64), (32, 32), (16, 16)],
+                )
+                self.iconbitmap(ico_path)
+        except Exception:
+            pass  # a missing picture should never crash the countdown
+
+        try:
+            tt_pic = Image.open(resource_path(TT_LOGO_FILE))
+            # Shrink the picture to a nice header height, keeping its shape.
+            width, height = tt_pic.size
+            target_h = 64
+            target_w = int(width * (target_h / height))
+            self.tt_logo_image = ctk.CTkImage(
+                light_image=tt_pic, dark_image=tt_pic,
+                size=(target_w, target_h))
+        except Exception:
+            pass
+
+    # ---------- Opening our GitHub page ----------
+
+    def _open_github(self):
+        """The 'View on GitHub' button — opens our repo in a web browser."""
+        webbrowser.open(REPO_URL)
+
     # ---------- Drawing the window ----------
 
     def _build_ui(self):
@@ -340,19 +474,32 @@ class CountdownApp(ctk.CTk):
         header.grid(row=0, column=0, pady=(26, 8), sticky="ew")
         header.grid_columnconfigure(0, weight=1)
 
+        # The round Stray Kids photo, if we managed to load it.
+        if self.skz_logo_image is not None:
+            ctk.CTkLabel(header, text="", image=self.skz_logo_image).pack(
+                pady=(0, 6))
+
         ctk.CTkLabel(
             header, text="STRAY KIDS", font=ctk.CTkFont(size=15, weight="bold"),
             text_color=FG_DIM,
-        ).grid(row=0, column=0)
-        ctk.CTkLabel(
-            header, text='"This & That"',
-            font=ctk.CTkFont(size=34, weight="bold"), text_color=ACCENT,
-        ).grid(row=1, column=0)
+        ).pack()
+
+        # The "This & That" title picture, if we have it — otherwise fall
+        # back to plain text so the header still looks right.
+        if self.tt_logo_image is not None:
+            ctk.CTkLabel(header, text="", image=self.tt_logo_image).pack(
+                pady=(6, 0))
+        else:
+            ctk.CTkLabel(
+                header, text='"This & That"',
+                font=ctk.CTkFont(size=34, weight="bold"), text_color=ACCENT,
+            ).pack(pady=(6, 0))
+
         ctk.CTkLabel(
             header,
             text="Drops August 7, 2026 · 1:00 PM KST",
             font=ctk.CTkFont(size=13), text_color=FG_DIM,
-        ).grid(row=2, column=0, pady=(4, 0))
+        ).pack(pady=(4, 0))
 
         # Show the release moment in THIS computer's own time zone.
         tz_name = RELEASE_LOCAL.strftime("%Z") or str(LOCAL_TZ)
@@ -361,8 +508,13 @@ class CountdownApp(ctk.CTk):
         ctk.CTkLabel(
             header,
             text=f"Your local time: {local_str} ({tz_name})",
-            font=ctk.CTkFont(size=13, weight="bold"), text_color="#e8e8ee",
-        ).grid(row=3, column=0, pady=(2, 0))
+            font=ctk.CTkFont(size=13, weight="bold"), text_color=FG_STRONG,
+        ).pack(pady=(2, 0))
+
+        # A thin red line under the header, like a circuit trace — a
+        # small "techy" touch that separates the title from the numbers.
+        ctk.CTkFrame(header, height=2, fg_color=ACCENT, corner_radius=0).pack(
+            fill="x", padx=40, pady=(14, 0))
 
         # --- The five number boxes (weeks, days, hours, minutes, seconds) ---
         self.units_frame = ctk.CTkFrame(self, fg_color="transparent")
@@ -370,14 +522,20 @@ class CountdownApp(ctk.CTk):
 
         self.unit_labels = {}   # so we can find each number label later
         unit_names = ["WEEKS", "DAYS", "HOURS", "MINUTES", "SECONDS"]
-        big_font = ctk.CTkFont(size=32, weight="bold")     # made once,
-        small_font = ctk.CTkFont(size=11, weight="bold")   # shared by all 5
+        # A typewriter-style font makes the numbers feel like a digital
+        # readout — made once, shared by all 5 boxes.
+        big_font = ctk.CTkFont(family=MONO_FONT, size=32, weight="bold")
+        small_font = ctk.CTkFont(size=11, weight="bold")
         for i, name in enumerate(unit_names):
             self.units_frame.grid_columnconfigure(i, weight=1, uniform="u")
-            card = ctk.CTkFrame(self.units_frame, corner_radius=14,
-                                fg_color=BG_CARD)
+            # A thin red outline makes each box look like a little circuit
+            # chip — part of the black/white/red "techy" look.
+            card = ctk.CTkFrame(self.units_frame, corner_radius=8,
+                                fg_color=BG_CARD, border_width=1,
+                                border_color=ACCENT)
             card.grid(row=0, column=i, padx=5, sticky="nsew")
-            value = ctk.CTkLabel(card, text="--", font=big_font)
+            value = ctk.CTkLabel(card, text="--", font=big_font,
+                                  text_color=FG_STRONG)
             value.pack(pady=(16, 0), padx=12)
             ctk.CTkLabel(
                 card, text=name, font=small_font, text_color=FG_DIM,
@@ -391,7 +549,8 @@ class CountdownApp(ctk.CTk):
         self.status_label.grid(row=2, column=0, pady=(0, 6))
 
         # --- The notifications box ---
-        notif_frame = ctk.CTkFrame(self, corner_radius=14, fg_color=BG_CARD)
+        notif_frame = ctk.CTkFrame(self, corner_radius=8, fg_color=BG_CARD,
+                                    border_width=1, border_color=ACCENT)
         notif_frame.grid(row=3, column=0, padx=24, pady=(6, 12), sticky="ew")
         notif_frame.grid_columnconfigure(0, weight=1)
 
@@ -444,10 +603,19 @@ class CountdownApp(ctk.CTk):
             hover_color=ACCENT_HOVER, command=self._test_notification,
         ).grid(row=0, column=0)
 
+        # A plain black-and-white outlined button for the two "secondary"
+        # actions, so the red button above stays the one eye-catching CTA.
         ctk.CTkButton(
-            btn_row, text="Quit app", fg_color="#3a3a42",
-            hover_color="#4a4a52", command=self._quit_app,
+            btn_row, text="View on GitHub", fg_color=CHIP_DARK,
+            hover_color="#232326", border_width=1, border_color=CHIP_TEXT,
+            text_color=CHIP_TEXT, command=self._open_github,
         ).grid(row=0, column=1, padx=(10, 0))
+
+        ctk.CTkButton(
+            btn_row, text="Quit app", fg_color=CHIP_DARK,
+            hover_color="#232326", border_width=1, border_color=FG_DIM,
+            text_color=CHIP_TEXT, command=self._quit_app,
+        ).grid(row=0, column=2, padx=(10, 0))
 
         # A helpful hint about what the X button does on this computer.
         if IS_MACOS:
@@ -461,7 +629,13 @@ class CountdownApp(ctk.CTk):
                     "the window is closed.")
         ctk.CTkLabel(
             self, text=hint, font=ctk.CTkFont(size=12), text_color=FG_DIM,
-        ).grid(row=4, column=0, pady=(0, 12))
+        ).grid(row=4, column=0, pady=(0, 4))
+
+        # A tiny credit line for the two pictures we didn't draw ourselves.
+        ctk.CTkLabel(
+            self, text="Stray Kids icon via Icons8 · Album art via Spotify",
+            font=ctk.CTkFont(size=10), text_color=FG_DIM,
+        ).grid(row=5, column=0, pady=(0, 12))
 
     # ---------- The tray icon (Windows / Linux only) ----------
 

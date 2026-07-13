@@ -28,7 +28,7 @@ jobs:
       - name: Install dependencies      # Go shopping for our toys
         run: pip install -r requirements.txt pyinstaller
       - name: Build .exe                 # Squish everything into one .exe
-        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.ico" --add-data "skz-logo.jpg;." --add-data "t&t-logo.png;." --collect-all customtkinter skz_countdown.py
       - uses: actions/upload-artifact@v4 # Put the finished .exe on a shelf
         with:
           name: SKZ-Countdown-Windows
@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies      # Go shopping for our toys
         run: pip3 install -r requirements.txt pyinstaller
       - name: Build .app                 # Squish everything into a Mac app
-        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --add-data "skz-logo.jpg:." --add-data "t&t-logo.png:." --collect-all customtkinter skz_countdown.py
       - name: Zip the .app bundle        # Mac apps are folders — zip to share
         run: cd dist && zip -r SKZ-Countdown-macOS.zip "SKZ-Countdown.app"
       - uses: actions/upload-artifact@v4 # Put the zip on the shelf
@@ -64,7 +64,7 @@ jobs:
       - name: Install dependencies      # Go shopping for our toys
         run: pip3 install -r requirements.txt pyinstaller
       - name: Build binary               # Squish everything into one file
-        run: pyinstaller --onefile --windowed --name "skz-countdown" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "skz-countdown" --add-data "skz-logo.jpg:." --add-data "t&t-logo.png:." --collect-all customtkinter skz_countdown.py
       - uses: actions/upload-artifact@v4 # Put it on the shelf
         with:
           name: SKZ-Countdown-Linux

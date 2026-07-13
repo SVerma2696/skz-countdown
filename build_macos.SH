@@ -12,8 +12,11 @@ pip3 install -r requirements.txt pyinstaller
 # Step 2: Squish everything into one .app bundle
 #   --onefile  = pack it all together
 #   --windowed = make a real Mac .app (no terminal window)
+#   --add-data = pack our two logo pictures inside the .app
 #   --collect-all customtkinter = pack ALL of customtkinter's art supplies
 pyinstaller --onefile --windowed --name "SKZ Countdown" \
+  --add-data "skz-logo.jpg:." \
+  --add-data "t&t-logo.png:." \
   --collect-all customtkinter skz_countdown.py
 
 echo 'Done! Your app is at "dist/SKZ Countdown.app" — drag it into /Applications.'
