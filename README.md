@@ -6,8 +6,10 @@ timezone and converts the release moment automatically — a STAY in Seoul,
 New York, or London all see the correct countdown for *their* clock.
 
 A clean white, black, and red look (Stray Kids' own red) with the group's
-icon and the album's title art built right into the header, plus a one-click
-button back to this GitHub page.
+icon and the album's title art built into the header. It also spotlights the
+8 members one at a time, shows the album tracklist, and has one-click buttons
+to the album on Spotify, Apple Music, and the Stray Kids shop — plus a
+"View on GitHub" button back to this page.
 
 Runs on **Windows, macOS, and Linux** (Python + CustomTkinter).
 
@@ -31,8 +33,8 @@ Runs on **Windows, macOS, and Linux** (Python + CustomTkinter).
 > 🪟 **Windows will warn you the first time** ("Windows protected your PC").
 > This just means the app isn't signed with a paid certificate — normal for
 > free indie apps. Click **More info → Run anyway**. See
-> [Getting Windows to trust the app](#-getting-windows-to-trust-the-app) below
-> for the full explanation and your options.
+> [Getting your computer to trust the app](#-getting-your-computer-to-trust-the-app)
+> below for Windows, macOS, and Linux details.
 
 ### 💻 Want the source code instead? (for developers)
 
@@ -55,11 +57,13 @@ python skz_countdown.py
 | GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern themed widgets on top of Tkinter |
 | Timezone handling | `zoneinfo` (standard library) + `tzdata` — release anchored to `Asia/Seoul`, converted to the user's local timezone |
 | Notifications | A real Windows 10/11 toast (via PowerShell + the WinRT notification API) on Windows; [plyer](https://github.com/kivy/plyer) with native fallbacks (`osascript` on macOS, `notify-send` on Linux) everywhere else |
-| Images | [Pillow](https://python-pillow.org/) — loads the two logo pictures and draws the tray icon |
+| Images | [Pillow](https://python-pillow.org/) — loads the logos, member/group photos and tracklist, draws placeholder art + the tray icon, and generates the memory-cached `CTkImage`s |
+| Layout | `CTkScrollableFrame` with a centered max-width column, so it looks right from a small window up to full-screen |
+| Links | `webbrowser` (standard library) — opens the album on Spotify / Apple Music / the store, and the repo on GitHub |
 | System tray | [pystray](https://github.com/moses-palmer/pystray) + Pillow (Windows/Linux); Dock + `tk::mac::ReopenApplication` on macOS |
 | Persistence | JSON settings in the OS-appropriate config directory (AppData / Application Support / `~/.config`) |
 | Start at login | `winreg` Run key (Windows) · LaunchAgent plist (macOS) · XDG autostart entry (Linux) |
-| Packaging | PyInstaller — standalone .exe / .app / binary, no Python required |
+| Packaging | PyInstaller — standalone .exe / .app / binary, no Python required; icons (`.ico` / `.icns`) auto-generated at build time |
 | CI/CD | GitHub Actions matrix build across `windows-latest`, `macos-latest`, `ubuntu-latest`, auto-attaching binaries to Releases |
 
 ## 📚 What I Learned
@@ -93,65 +97,111 @@ single-OS project could:
   a flaky notification backend shouldn't crash a countdown app — every
   optional integration has a fallback path and the UI tells the user what's
   available.
+- **Keeping memory flat over a long-running app.** This app can sit in the
+  tray for weeks, so nothing is allowed to slowly leak. Fonts and images are
+  built once and cached (a `CTkImage` per member/logo, reused forever), the
+  countdown only repaints a digit when it actually changes, and while the
+  window is hidden the loop slows from every 1s to every 15s. The member
+  spotlight animates by only recoloring a border, not rebuilding widgets.
+- **Missing assets should degrade, not crash.** Member and group photos are
+  optional — if a file isn't there, the app draws a clean placeholder in its
+  place, so it always looks finished and never errors over a missing picture.
 - **CI/CD removes the "works on my machine" packaging problem.** PyInstaller
   can only build for the OS it runs on; a GitHub Actions matrix builds all
   three targets on every version tag and publishes them to Releases
-  automatically.
+  automatically — even generating each platform's icon (`.ico` / `.icns`)
+  on the fly.
 
 ## Features
 
 - Live countdown (weeks, days, hours, minutes, seconds), updates every second
 - **Timezone-aware:** anchored to 1:00 PM KST and converted to your system's
   local timezone, DST included. Your local release time is shown in the header.
-- **A white, black & red look**, built around the group's own icon and the
-  album's title art, with a **"View on GitHub" button** built right into the
-  window so anyone using the app can find the source in one click.
+- **8-member spotlight:** a row of 8 columns, one per member, that lights up
+  one at a time on a cycle. Group photos get their own rotating showcase, and
+  the album **tracklist** is shown too. (Member/group images are placeholders
+  you can swap for real ones — see [Adding your own images](#-adding-your-own-images).)
+- **One-click album links** to the [Stray Kids Shop](https://straykidsshop.com/collections/this-that),
+  [Apple Music](https://music.apple.com/us/album/this-that/6781751949), and
+  [Spotify](https://open.spotify.com/album/46TYlDjLrEsOLFgxfxNiUy), plus a
+  **"View on GitHub"** button back to this repo.
+- **Clean "engineering console" look:** white/black/red, monospace digital
+  readouts, `// SECTION` headers, and thin red circuit-trace dividers.
+- **Full-screen friendly:** the whole page scrolls and stays centered in a
+  comfy column whether the window is small or maximized.
+- **Settings live in a pop-up window** (the ⚙ button), so the main view stays
+  clean: master notification switch, per-milestone checkboxes, start-at-login,
+  and a test-notification button.
 - **Keeps running when you close it:**
-  - Windows / Linux → minimizes to the system tray; right-click the tray icon
-    to reopen or quit
+  - Windows / Linux → minimizes to the system tray; right-click to reopen/quit
   - macOS → keeps running in the Dock; click the Dock icon to reopen
-  - A "Quit app" button in the UI fully exits on any platform
+  - A "Quit app" button fully exits on any platform
 - **Never loses time:** the countdown is always computed live from the release
-  timestamp vs. your system clock — even a full quit and relaunch shows the
-  exact correct remaining time.
-- Desktop notifications at milestones (1 week, 1 day, 1 hour, release) with
-  per-milestone checkboxes and a master switch. On Windows this uses a real
-  Windows toast; macOS and Linux use plyer with native fallbacks (`osascript`
-  / `notify-send`).
-- **Start at login** checkbox on all platforms:
-  - Windows → per-user registry Run entry
-  - macOS → LaunchAgent plist in `~/Library/LaunchAgents`
-  - Linux → XDG autostart entry in `~/.config/autostart`
-  - Unchecking removes it cleanly.
-- Settings persist between launches (AppData / Application Support / .config)
-- Celebration state once the album drops
+  timestamp vs. your system clock — even a full quit and relaunch is exact.
+- Desktop notifications at milestones (1 week, 1 day, 1 hour, release). On
+  Windows this uses a real Windows toast; macOS and Linux use plyer with
+  native fallbacks (`osascript` / `notify-send`). If a milestone passes while
+  the app is closed, you get one catch-up alert next launch.
+- **Start at login** on all platforms (registry / LaunchAgent / XDG autostart)
+- **Low, flat memory use:** images and fonts are cached and reused, digits
+  repaint only on change, and the app idles slowly while hidden in the tray.
+- Settings persist between launches; celebration state once the album drops.
+
+## 🖼️ Adding your own images
+
+The app ships with tidy **placeholders** so it looks finished out of the box.
+To use real pictures, just drop files into the `assets/` folder — the app
+picks them up automatically and falls back to a placeholder for anything
+that's missing (it never crashes over a missing file):
+
+- `assets/members/` — one portrait per member: `1_bang_chan.png`,
+  `2_lee_know.png`, `3_changbin.png`, `4_hyunjin.png`, `5_han.png`,
+  `6_felix.png`, `7_seungmin.png`, `8_in.png`
+- `assets/group/` — group photos named `1.png`, `2.png`, `3.png`, … (the app
+  cycles through however many it finds)
+- `assets/logos/` — *optional* official brand logos `spotify.png`,
+  `apple_music.png`, `store.png`, `github.png` (replaces the simple lettered
+  placeholders). These are third-party trademarks, so they're **not** bundled.
+
+Each folder has a `README.txt` repeating these names. See
+[License & credits](#license) for the rules on what you can redistribute.
 
 ## 🖼️ Image credits
 
-The two pictures in the app header aren't drawn by the app — they're:
+The pictures in the app header aren't drawn by the app — they're:
 
 - **Stray Kids icon** — [Icons8](https://icons8.com/icons/set/stray-kids)
   ([image source](https://img.icons8.com/plasticine/1200/stray-kids.jpg))
 - **"This & That" title art** — from the album's page on
   [Spotify](https://open.spotify.com/album/46TYlDjLrEsOLFgxfxNiUy)
   ([image source](https://i.scdn.co/image/ab67616d00001e02cad184e653ea5dea71bc7365))
+- **Tracklist image** — the official *"This & That"* tracklist reveal.
 
-Both are also credited in a small line of text at the bottom of the app
+The **member and group images are placeholders drawn by the app** — no real
+photos of the members are bundled with this project. The **album-link and
+GitHub buttons** use simple lettered placeholders drawn by the app, not the
+official brand logos (those are trademarks and aren't included). Any real
+photos or logos you add locally are yours to source and are covered by their
+own owners' terms, not this project's license.
+
+The header credit line also appears in small text at the bottom of the app
 window itself.
 
 ## Build a downloadable app for each OS
 
 PyInstaller builds for the OS you run it on — so build the Windows .exe on
 Windows, the .app on a Mac, and the Linux binary on Linux. Build scripts are
-included, and each one packs the two logo pictures inside the finished app
-(via `--add-data`) so they still show up once it's installed somewhere else;
-the Windows build also sets `skz-logo.ico` as the .exe's own icon (via
-`--icon`), so it shows correctly in File Explorer and the taskbar too.
+included, and each one bundles the logos, the tracklist, and the whole
+`assets/` folder inside the finished app (via `--add-data`) so every picture
+still shows once it's installed elsewhere. The Windows and macOS scripts also
+**auto-generate the app icon** (`.ico` / `.icns`) from `skz-logo.jpg` at build
+time — so the Stray Kids picture shows in Explorer/taskbar and in the Mac Dock,
+and there's no icon file to commit.
 
 | OS      | Run                | Output                          |
 |---------|--------------------|---------------------------------|
-| Windows | `build_windows.bat`| `dist\SKZ Countdown.exe`        |
-| macOS   | `./build_macos.sh` | `dist/SKZ Countdown.app`        |
+| Windows | `build_windows.bat`| `dist\SKZ-Countdown.exe`        |
+| macOS   | `./build_macos.sh` | `dist/SKZ-Countdown.app`        |
 | Linux   | `./build_linux.sh` | `dist/skz-countdown` (binary)   |
 
 Each output is fully standalone — no Python needed on the target machine.
@@ -163,13 +213,13 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 GitHub spins up Windows, macOS, and Linux runners, builds each binary with
-PyInstaller, and publishes a Release with all three attached (`SKZ
-Countdown.exe`, `SKZ-Countdown-macOS.zip`, `skz-countdown`). You can also
+PyInstaller, and publishes a Release with all three attached
+(`SKZ-Countdown.exe`, `SKZ-Countdown-macOS.zip`, `skz-countdown`). You can also
 trigger a build manually from the repo's **Actions** tab. Anyone can then
 download the app for their OS straight from your Releases page.
 
@@ -184,12 +234,17 @@ download the app for their OS straight from your Releases page.
   GNOME, install the AppIndicator extension. If no tray is available, the app
   quits on close instead (the UI tells you).
 
-## 🛡️ Getting Windows to trust the app
+## 🛡️ Getting your computer to trust the app
+
+Every OS is cautious about apps downloaded from the internet that aren't
+signed with a paid certificate. That warning is about *reputation*, not
+safety — it's completely normal for a small free project. Here's how to get
+past it on each system.
+
+### 🪟 Windows (SmartScreen)
 
 Windows SmartScreen warns on *any* app it hasn't "seen" from enough other
-people yet, regardless of how safe it is — that's normal for a small free
-project, not a sign something's wrong. Here's what you can do about it, from
-quickest to most involved:
+people yet. From quickest to most involved:
 
 1. **"More info → Run anyway"** — click **More info** on the SmartScreen
    warning, then **Run anyway**. This is the standard, free way past it and
@@ -197,20 +252,40 @@ quickest to most involved:
 2. **Unblock the file before running it** — right-click the downloaded
    `.exe` → **Properties** → check **Unblock** at the bottom of the
    **General** tab → **OK**. This removes the "downloaded from the internet"
-   flag Windows attaches to the file, so SmartScreen won't warn on it again.
-3. **It gets easier over time, for free** — SmartScreen's warnings ease up
-   automatically as more people download and run the same file without
-   reporting problems ("reputation"). There's nothing to configure for
-   this — it just happens as the Release gets more downloads.
+   flag, so SmartScreen won't warn on it again.
+3. **It gets easier over time, for free** — SmartScreen eases up automatically
+   as more people download and run the same file without problems
+   ("reputation"). Nothing to configure — it just happens.
 4. **Remove the warning entirely (costs money)** — buy a code-signing
-   certificate from a certificate authority (DigiCert, SSL.com, etc.) and
-   sign the `.exe` with it (`signtool sign /f cert.pfx ...` after building).
-   A standard certificate still needs to build up reputation like above; an
-   **EV (Extended Validation)** certificate skips that and is trusted
-   immediately, but costs noticeably more and requires a hardware security
-   key. This is the only option that removes the warning for every user
-   right away — reasonable for a paid or widely-distributed app, usually
-   overkill for a free fan project like this one.
+   certificate (DigiCert, SSL.com, etc.) and sign the `.exe`
+   (`signtool sign /f cert.pfx ...`). A standard cert still builds reputation
+   like above; an **EV** cert is trusted immediately but costs more and needs
+   a hardware key. Overkill for a free fan project.
+
+### 🍎 macOS (Gatekeeper)
+
+The `.app` is unsigned, so Gatekeeper blocks the normal double-click. Options,
+quickest first:
+
+1. **Right-click → Open** (not double-click) the first time, then click
+   **Open** in the dialog. macOS remembers your choice, so future launches are
+   a normal double-click.
+2. **System Settings → Privacy & Security** — if you double-clicked and it was
+   blocked, a button appears here saying *"…was blocked"* with an **Open
+   Anyway** option.
+3. **Strip the quarantine flag from Terminal** — `xattr -dr com.apple.quarantine
+   "/Applications/SKZ-Countdown.app"` removes the "downloaded" mark so it opens
+   cleanly.
+4. **Remove the warning entirely (costs money)** — join the Apple Developer
+   Program ($99/yr) and **sign + notarize** the app. This is the only way to
+   make it open with no warning on *everyone's* Mac. Overkill for a fan project.
+
+### 🐧 Linux
+
+There's no Gatekeeper/SmartScreen — Linux just needs permission to run the
+file: `chmod +x skz-countdown` then `./skz-countdown`. For pop-ups you need
+`libnotify` (`notify-send`), and the tray needs an AppIndicator-capable
+desktop (GNOME users: install the AppIndicator extension).
 
 ## Notes
 
@@ -226,11 +301,20 @@ quickest to most involved:
 The code in this repository is released under the [MIT License](LICENSE) —
 use it, modify it, ship it, no strings attached.
 
-The Stray Kids name, the *"This & That"* album title, and the two logo
-pictures (see [Image credits](#️-image-credits) above) are the property of
-their respective owners (JYP Entertainment / Icons8 / Spotify) and are used
-here for a non-commercial fan project. The MIT license covers this project's
-own code only, not those third-party assets.
+The MIT license covers **this project's own code only.** It does **not** cover:
+
+- The Stray Kids name and the *"This & That"* album title, artwork, tracklist,
+  and the two header logo images — property of **JYP Entertainment** (and the
+  icon via **Icons8** / album art via **Spotify**; see
+  [Image credits](#️-image-credits)).
+- Any **member photos, group photos, or official brand logos you add** to the
+  `assets/` folder. Those are owned by their respective rights holders (the
+  photographers, JYP Entertainment, Spotify, Apple, etc.). This project ships
+  only app-drawn placeholders; sourcing and using real images is your
+  responsibility and is subject to those owners' terms.
+
+This is a non-commercial fan project and is not affiliated with or endorsed by
+JYP Entertainment or Stray Kids.
 
 ## About
 

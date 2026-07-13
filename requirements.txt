@@ -1,8 +1,9 @@
 # This file is a shopping list. When you run "pip install -r requirements.txt",
 # the computer goes to the store (the internet) and gets all these toys for us.
 
-customtkinter>=5.2.0   # Draws our pretty dark window with rounded boxes
+customtkinter>=5.2.0   # Draws our clean white/black/red window
 plyer>=2.1.0           # Sends the little pop-up messages (notifications)
 tzdata>=2024.1         # A map of every timezone in the world (Windows needs it)
 pystray>=0.19.5        # Puts our tiny icon in the corner tray of your screen
-Pillow>=10.0.0         # Draws pictures (we use it to draw the tray icon)
+Pillow>=10.0.0         # Loads the logos, member photos, tracklist, and draws
+                       # the placeholder pictures + tray icon

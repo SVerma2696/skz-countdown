@@ -10,3 +10,11 @@ dist/          # The finished app files (too big for git — we share these
 *.spec         # PyInstaller's recipe notes (it rewrites these each build)
 .venv/         # A private toy box of Python packages (everyone makes their own)
 venv/          # Same thing, different name
+# Icon files the build scripts generate automatically from skz-logo.jpg —
+# no need to store them, they get remade on every build.
+skz-logo.ico
+skz-logo.icns
+skz.iconset/
+
+# Settings file the app writes while running (belongs on each user's machine)
+skz_countdown_settings.json
