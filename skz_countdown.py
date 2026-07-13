@@ -74,7 +74,7 @@ ALBUM_NAME = 'Stray Kids — "This & That"'
 REPO_URL = "https://github.com/SVerma2696/skz-countdown"  # our home on GitHub
 
 # The two picture files that live right next to this script.
-SKZ_LOGO_FILE = "skz-logo.jpg"   # the Stray Kids photo (window icon + header)
+SKZ_LOGO_FILE = "skz-logo.png"   # the Stray Kids photo (window icon + header)
 TT_LOGO_FILE = "t&t-logo.png"    # the "This & That" title picture
 TRACKLIST_FILE = "tracklist.png"  # the picture of the song list
 

@@ -10,7 +10,7 @@ pip install -r requirements.txt pyinstaller
 
 REM Step 2: Turn our logo photo into a proper .ico icon file, so the .exe
 REM   shows the Stray Kids picture in File Explorer and the taskbar.
-python -c "from PIL import Image; Image.open('skz-logo.jpg').save('skz-logo.ico', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])"
+python -c "from PIL import Image; Image.open('skz-logo.png').save('skz-logo.ico', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])"
 
 REM Step 3: Squish everything into ONE file.
 REM   --onefile   = one single .exe instead of a big messy folder
@@ -22,7 +22,7 @@ REM                 On Windows the two sides of --add-data are split by ";"
 REM   --collect-all customtkinter = pack ALL of customtkinter's art supplies
 pyinstaller --onefile --windowed --name "SKZ-Countdown" ^
   --icon "skz-logo.ico" ^
-  --add-data "skz-logo.jpg;." ^
+  --add-data "skz-logo.png;." ^
   --add-data "t&t-logo.png;." ^
   --add-data "tracklist.png;." ^
   --add-data "assets;assets" ^

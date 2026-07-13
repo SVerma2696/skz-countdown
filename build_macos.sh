@@ -14,9 +14,9 @@ pip3 install -r requirements.txt pyinstaller
 #   (sips and iconutil are built into every Mac.)
 rm -rf skz.iconset && mkdir skz.iconset
 for SIZE in 16 32 64 128 256 512; do
-  sips -z $SIZE $SIZE skz-logo.jpg --out "skz.iconset/icon_${SIZE}x${SIZE}.png" >/dev/null
+  sips -z $SIZE $SIZE skz-logo.png --out "skz.iconset/icon_${SIZE}x${SIZE}.png" >/dev/null
   DBL=$((SIZE*2))
-  sips -z $DBL $DBL skz-logo.jpg --out "skz.iconset/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
+  sips -z $DBL $DBL skz-logo.png --out "skz.iconset/icon_${SIZE}x${SIZE}@2x.png" >/dev/null
 done
 iconutil -c icns skz.iconset -o skz-logo.icns
 rm -rf skz.iconset
@@ -27,7 +27,7 @@ rm -rf skz.iconset
 #                (on Mac/Linux the two sides of --add-data are split by ":")
 pyinstaller --onefile --windowed --name "SKZ-Countdown" \
   --icon "skz-logo.icns" \
-  --add-data "skz-logo.jpg:." \
+  --add-data "skz-logo.png:." \
   --add-data "t&t-logo.png:." \
   --add-data "tracklist.png:." \
   --add-data "assets:assets" \

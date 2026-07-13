@@ -27,9 +27,9 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt pyinstaller
       - name: Make the .ico icon from our logo photo
-        run: python -c "from PIL import Image; Image.open('skz-logo.jpg').save('skz-logo.ico', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])"
+        run: python -c "from PIL import Image; Image.open('skz-logo.png').save('skz-logo.ico', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])"
       - name: Build .exe
-        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.ico" --add-data "skz-logo.jpg;." --add-data "t&t-logo.png;." --add-data "tracklist.png;." --add-data "assets;assets" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.ico" --add-data "skz-logo.png;." --add-data "t&t-logo.png;." --add-data "tracklist.png;." --add-data "assets;assets" --collect-all customtkinter skz_countdown.py
       - uses: actions/upload-artifact@v4
         with:
           name: SKZ-Countdown-Windows
@@ -49,13 +49,13 @@ jobs:
         run: |
           rm -rf skz.iconset && mkdir skz.iconset
           for SIZE in 16 32 64 128 256 512; do
-            sips -z $SIZE $SIZE skz-logo.jpg --out "skz.iconset/icon_${SIZE}x${SIZE}.png"
+            sips -z $SIZE $SIZE skz-logo.png --out "skz.iconset/icon_${SIZE}x${SIZE}.png"
             DBL=$((SIZE*2))
-            sips -z $DBL $DBL skz-logo.jpg --out "skz.iconset/icon_${SIZE}x${SIZE}@2x.png"
+            sips -z $DBL $DBL skz-logo.png --out "skz.iconset/icon_${SIZE}x${SIZE}@2x.png"
           done
           iconutil -c icns skz.iconset -o skz-logo.icns
       - name: Build .app
-        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.icns" --add-data "skz-logo.jpg:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.icns" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
       - name: Zip the .app bundle
         run: cd dist && zip -r SKZ-Countdown-macOS.zip "SKZ-Countdown.app"
       - uses: actions/upload-artifact@v4
@@ -74,7 +74,7 @@ jobs:
       - name: Install dependencies
         run: pip3 install -r requirements.txt pyinstaller
       - name: Build binary
-        run: pyinstaller --onefile --windowed --name "skz-countdown" --add-data "skz-logo.jpg:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "skz-countdown" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
       - uses: actions/upload-artifact@v4
         with:
           name: SKZ-Countdown-Linux

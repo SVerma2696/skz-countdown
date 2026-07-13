@@ -12,7 +12,7 @@ pip3 install -r requirements.txt pyinstaller
 #   --add-data = pack the logos, tracklist, and assets folder inside the binary
 #                (on Mac/Linux the two sides of --add-data are split by ":")
 pyinstaller --onefile --windowed --name "skz-countdown" \
-  --add-data "skz-logo.jpg:." \
+  --add-data "skz-logo.png:." \
   --add-data "t&t-logo.png:." \
   --add-data "tracklist.png:." \
   --add-data "assets:assets" \

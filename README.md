@@ -194,7 +194,7 @@ Windows, the .app on a Mac, and the Linux binary on Linux. Build scripts are
 included, and each one bundles the logos, the tracklist, and the whole
 `assets/` folder inside the finished app (via `--add-data`) so every picture
 still shows once it's installed elsewhere. The Windows and macOS scripts also
-**auto-generate the app icon** (`.ico` / `.icns`) from `skz-logo.jpg` at build
+**auto-generate the app icon** (`.ico` / `.icns`) from `skz-logo.png` at build
 time — so the Stray Kids picture shows in Explorer/taskbar and in the Mac Dock,
 and there's no icon file to commit.
 
