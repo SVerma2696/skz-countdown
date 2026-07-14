@@ -7,10 +7,12 @@ WHAT THIS PROGRAM DOES (the simple version):
   3. It subtracts one from the other and shows you how long is left.
   4. It taps you on the shoulder (a notification) at big moments.
 
-It also shows the 8 members one at a time, the album tracklist, and buttons
-that jump straight to the album on Spotify, Apple Music, and the Stray Kids
-shop. It runs on Windows, Mac, and Linux, and keeps counting quietly in the
-background even when you close the window.
+It also shows all 8 members lit up at once (click one to read about them),
+the album tracklist, and buttons that jump straight to the album on Spotify,
+Apple Music, and the Stray Kids shop. If you drop in more than one photo for
+a member (or the group), the app shuffles between them over time — never
+showing the same picture twice in a row. It runs on Windows, Mac, and Linux,
+and keeps counting quietly in the background even when you close the window.
 
 A note on the "engineering console" look: the section titles start with "//"
 (that's how programmers write a note-to-self in code), the numbers use a
@@ -22,6 +24,7 @@ engineer would build.
 # ---- These are the "toolboxes" we borrow code from ----
 import json          # lets us save settings as a little text file
 import os            # lets us talk to folders and files
+import random        # lets us shuffle photos so they don't repeat in a row
 import shlex         # helps write safe commands for Linux
 import subprocess    # lets us run other programs (like notifications)
 import sys           # tells us which operating system we're on
@@ -41,9 +44,10 @@ except ImportError:
     PLYER_AVAILABLE = False
 
 # Try to grab the "drawing pictures" toolbox (Pillow). We use it to show
-# the logos, the member photos, the tracklist, and the tray icon.
+# the logos, the member photos, the tracklist, the tray icon, the seven-
+# segment countdown digits, and the faint circuit-board background.
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageTk
+    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageTk
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -68,7 +72,7 @@ if not IS_MACOS and PIL_AVAILABLE:
 # ---------------- The important facts about the album ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.3.0"
 APP_ID = "skz-countdown"
 ALBUM_NAME = 'Stray Kids — "This & That"'
 REPO_URL = "https://github.com/SVerma2696/skz-countdown"  # our home on GitHub
@@ -100,6 +104,45 @@ MEMBERS = [
     ("Seungmin", "7_seungmin.png"),
     ("I.N", "8_in.png"),
 ]
+
+# A short, friendly blurb for each member — shown in their pop-up window
+# when you click their card.
+MEMBER_DESCRIPTIONS = {
+    "Bang Chan": (
+        "The leader of Stray Kids. Born in Sydney, Australia, Chan is a "
+        "main producer and vocalist who leads the group's in-house "
+        "production team, 3RACHA."
+    ),
+    "Lee Know": (
+        "Main dancer and vocalist, known by his real name Minho. Famous "
+        "for his sharp, precise choreography and his beloved cats."
+    ),
+    "Changbin": (
+        "A rapper and producer, and one third of 3RACHA alongside Bang "
+        "Chan and Han. Known for his deep voice and powerful stage "
+        "presence."
+    ),
+    "Hyunjin": (
+        "A dancer and vocalist who also contributes to the group's "
+        "choreography and fashion direction."
+    ),
+    "Han": (
+        "Rapper, producer, and the third member of 3RACHA. Full name Han "
+        "Jisung — he writes and composes many of Stray Kids' title tracks."
+    ),
+    "Felix": (
+        "A rapper born in Sydney, Australia, known for his distinctively "
+        "low voice and bright, high-energy personality."
+    ),
+    "Seungmin": (
+        "A vocalist often praised for his stable, powerful live singing "
+        "and dry sense of humor."
+    ),
+    "I.N": (
+        "The youngest member (the group's 'maknae') and a vocalist, full "
+        "name Yang Jeongin — known for a low, steady voice for his age."
+    ),
+}
 
 # The buttons that jump to the album online.
 # Each one is (label, web address, brand color, logo file name).
@@ -137,15 +180,44 @@ MILESTONES = [
 
 # The colors we paint with (written as computer color codes).
 # Black, white, and Stray Kids' red — clean and sleek, like a control panel.
-ACCENT = "#E4002B"        # Stray Kids red
+# RED IS THE ONE ACCENT: we try hard to only use it for the thing that's
+# actually active or important right now (the ticking seconds, a hovered
+# member, the one primary button) — never just to decorate a box. Black
+# and white do the rest of the work; that restraint is what makes it look
+# "designed" instead of "colorful."
+ACCENT = "#E4002B"        # Stray Kids red — the one accent color
 ACCENT_HOVER = "#FF2E4F"  # a lighter red for when the mouse hovers
-BG_MAIN = "#FFFFFF"       # crisp white window background
-BG_CARD = "#F7F7F9"       # the faintest gray, so boxes stand out on white
-BG_CARD_2 = "#EFEFF2"     # a slightly deeper gray for placeholders
-FG_DIM = "#6b6b76"        # medium gray for small text (readable on white)
-FG_STRONG = "#141416"     # near-black for text that should pop off the page
-CHIP_DARK = "#141416"     # near-black for our outlined "chip" buttons
-CHIP_TEXT = "#FFFFFF"     # their always-white text/outline
+STATUS_BAR_BG = "#141416"  # the status bar is ALWAYS this near-black —
+                            # it's a fixed "terminal strip", not part of
+                            # the light/dark page theme below
+
+# Two full "looks" for the rest of the app — the Settings window has a
+# switch that flips between them. Everything else (ACCENT, fonts) stays
+# the same in both; only the page's own black/white balance changes.
+THEMES = {
+    "light": dict(
+        BG_MAIN="#FFFFFF",       # crisp white window background
+        BG_CARD="#F7F7F9",       # faintest gray, so boxes stand out
+        CARD_BORDER="#E2E2E7",   # neutral outline for ordinary boxes
+        DIVIDER="#E7E7EB",       # the thin line next to "// SECTION" titles
+        FG_DIM="#6b6b76",        # medium gray for small text
+        FG_STRONG="#141416",     # near-black for text that should pop
+        CHIP_DARK="#141416",     # dark "chip" buttons (GitHub / Quit)
+        CHIP_TEXT="#FFFFFF",     # their text/outline
+        SEG_OFF="#E7E7EA",       # an "unlit" LED segment, barely visible
+    ),
+    "dark": dict(
+        BG_MAIN="#0D0D0F",       # near-black window background
+        BG_CARD="#18181B",       # slightly lighter, so boxes stand out
+        CARD_BORDER="#2A2A30",   # neutral outline for ordinary boxes
+        DIVIDER="#2A2A30",       # the thin line next to "// SECTION" titles
+        FG_DIM="#9a9aa2",        # soft gray for small text
+        FG_STRONG="#FFFFFF",     # bright white for text that should pop
+        CHIP_DARK="#F2F2F2",     # light "chip" buttons (inverted, for contrast)
+        CHIP_TEXT="#141416",     # their text/outline
+        SEG_OFF="#242428",       # an "unlit" LED segment, barely visible
+    ),
+}
 
 # How often to look at the clock (in milliseconds).
 # A typewriter-style font makes the numbers feel like a digital readout.
@@ -155,8 +227,10 @@ MONO_FONT = "Consolas" if IS_WINDOWS else "Menlo" if IS_MACOS else "monospace"
 TICK_VISIBLE_MS = 1000    # window open: every 1 second (so seconds tick)
 TICK_HIDDEN_MS = 15000    # window hidden: every 15 seconds (saves work,
                           # because nobody can see the seconds anyway)
-MEMBER_CYCLE_MS = 3500    # spotlight a new member every 3.5 seconds
+MEMBER_CYCLE_MS = 3500    # give a member a fresh photo every 3.5 seconds
 GROUP_CYCLE_MS = 6000     # swap the group photo every 6 seconds
+BOOT_TYPE_MS = 18         # how fast the boot line "types" itself out
+BOOT_BLINK_MS = 600       # how often the boot cursor blinks after that
 
 
 def resource_path(filename):
@@ -419,7 +493,7 @@ def _load_font(size):
     return ImageFont.load_default()   # last-resort tiny built-in font
 
 
-def _make_member_placeholder(name, size):
+def _make_member_placeholder(name, size, border_color):
     """Draw a simple portrait stand-in (a soft face circle + a hint).
 
     We do NOT write the name here, because the app already shows the name on
@@ -431,8 +505,9 @@ def _make_member_placeholder(name, size):
     pad = int(w * 0.20)
     top = int(h * 0.16)
     d.ellipse([pad, top, w - pad, top + (w - 2 * pad)], fill="#D9D9DE")
-    # A thin red frame — matches our circuit-trace theme.
-    d.rectangle([1, 1, w - 2, h - 2], outline=ACCENT, width=2)
+    # A thin neutral frame — red is saved for the active/important thing,
+    # so a placeholder box doesn't get it.
+    d.rectangle([1, 1, w - 2, h - 2], outline=border_color, width=2)
     # A tiny "add photo here" hint near the bottom.
     small = _load_font(max(9, int(w * 0.085)))
     hint = "photo →"
@@ -441,12 +516,12 @@ def _make_member_placeholder(name, size):
     return img
 
 
-def _make_group_placeholder(index, size):
+def _make_group_placeholder(index, size, border_color):
     """Draw a simple wide 'group photo' stand-in."""
     w, h = size
     img = Image.new("RGB", (w, h), "#E4E4E8")
     d = ImageDraw.Draw(img)
-    d.rectangle([1, 1, w - 2, h - 2], outline=ACCENT, width=2)
+    d.rectangle([1, 1, w - 2, h - 2], outline=border_color, width=2)
     font = _load_font(max(16, int(h * 0.14)))
     text = f"GROUP PHOTO {index}"
     tw = d.textlength(text, font=font)
@@ -478,6 +553,75 @@ def _make_logo_placeholder(label, color, size):
     return img
 
 
+# ---------------- Drawing the seven-segment countdown digits ----------------
+# Real digital clocks light up little bars to make each digit — this draws
+# that same look ourselves, instead of just using a computer font.
+
+# Which of the 7 bars (a=top, b=upper-right, c=lower-right, d=bottom,
+# e=lower-left, f=upper-left, g=middle) are lit for each digit 0-9.
+_SEVEN_SEG = {
+    "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
+    "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg",
+}
+
+# We draw each digit this many times bigger than it's shown on screen,
+# then let CTkImage shrink it back down. Windows often displays windows a
+# little bigger than "actual size" (DPI scaling) — starting from a much
+# bigger, crisp picture means that stretch always shrinks a picture down
+# (sharp) instead of blowing a small one up (blurry).
+_SEG_SUPERSAMPLE = 4
+
+# How big one digit is on screen. Bigger than a plain font would need,
+# since a blocky LED digit needs some size to actually read clearly.
+DIGIT_W = 46
+DIGIT_H = 78
+
+
+def _seven_segment_digit(digit, w, h, lit_color, off_color, glow):
+    """Draw one digit as a blocky, seven-segment "LED" glyph.
+
+    Segments that are OFF are still drawn, just very faintly (like a real
+    LED display when a bar isn't powered) — so a "1" reads as a "1" next to
+    a ghost of the rest of the "8" shape, the way a real digital clock looks.
+    When glow=True, a soft blurred copy of the LIT bars sits behind the
+    crisp digit, like the bar is really glowing.
+    """
+    t = max(4, int(w * 0.18))   # how thick each bar is
+    mid = h // 2
+    # The 7 bars, as simple rounded-rectangle boxes.
+    bars = {
+        "a": (t, 0, w - t, t),
+        "g": (t, mid - t // 2, w - t, mid + t // 2),
+        "d": (t, h - t, w - t, h),
+        "f": (0, t, t, mid),
+        "b": (w - t, t, w, mid),
+        "e": (0, mid, t, h - t),
+        "c": (w - t, mid, w, h - t),
+    }
+    lit_names = set(_SEVEN_SEG.get(digit, ""))
+    radius = max(2, t // 3)
+
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    for name, box in bars.items():
+        d.rounded_rectangle(box, radius=radius,
+                            fill=lit_color if name in lit_names else off_color)
+
+    if glow and lit_names:
+        # A blurry red copy of ONLY the lit bars, sitting behind the crisp
+        # digit, gives that soft "glowing LED" look real clocks have.
+        glow_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        gd = ImageDraw.Draw(glow_img)
+        for name in lit_names:
+            gd.rounded_rectangle(bars[name], radius=radius, fill=lit_color)
+        glow_img = glow_img.filter(ImageFilter.GaussianBlur(max(3, t // 2)))
+        combined = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        combined.alpha_composite(glow_img)
+        combined.alpha_composite(img)
+        img = combined
+    return img
+
+
 # ---------------- The window itself ----------------
 
 
@@ -492,19 +636,23 @@ class CountdownApp(ctk.CTk):
         self._bg_tip_shown = False     # did we explain the tray yet?
         self._startup_check_done = False  # lets us send "catch-up" alerts
         self._tick_job = None          # the "come back later" reminder ID
-        self._member_job = None        # reminder ID for the member spotlight
+        self._member_job = None        # reminder ID for the member photo shuffle
         self._group_job = None         # reminder ID for the group photo swap
         self._last_shown = {}          # what each number label says right now
         self._celebrating = False      # did we already switch to party mode?
-        self._img_cache = {}           # remember pictures so we load them once
-        self._member_index = 0         # which member is in the spotlight
+        self._img_cache = {}           # remember finished pictures (CTkImage)
+        self._img_cache_raw = {}       # remember raw PIL pictures (digits, PCB)
         self._group_index = 0          # which group photo is showing
+        self._boot_generation = 0      # lets us cancel an old boot animation
+        # (which photo each member is showing lives in self._member_current,
+        # set up in _build_members once we know how many photos each has)
+
+        # Dark mode or light mode? Read the choice we saved last time.
+        self.dark_mode = bool(self.settings.get("dark_mode", False))
+        self._apply_theme()   # works out self.BG_MAIN, self.FG_STRONG, etc.
 
         self.title(f"{APP_NAME} — This & That")
-        self.geometry("960x780")       # starting window size
-        self.minsize(880, 600)         # wide enough to fit all 8 members
-        ctk.set_appearance_mode("light")
-        self.configure(fg_color=BG_MAIN)   # paint the window white
+        self.minsize(880, 600)
 
         # MEMORY SAVER: make our fonts ONCE and reuse them forever.
         # (Making a new font every second would slowly eat RAM.)
@@ -514,9 +662,25 @@ class CountdownApp(ctk.CTk):
                                          weight="bold")
         self._font_num = ctk.CTkFont(family=MONO_FONT, size=34, weight="bold")
         self._font_unit = ctk.CTkFont(size=11, weight="bold")
+        self._font_mono_small = ctk.CTkFont(family=MONO_FONT, size=10)
 
         self._load_logos()   # open our logo + title pictures, if we can
         self._build_ui()     # draw everything
+
+        # SIZE THE WINDOW TO FIT WHAT WE ACTUALLY DREW, instead of guessing
+        # a fixed pixel size: Windows' own "make everything bigger" display
+        # setting scales up every widget we asked for by some factor we
+        # don't control, so a fixed guess can end up too small and clip the
+        # right edge. Asking the content frame what width it actually
+        # needs, AFTER drawing everything, always fits — on any screen, at
+        # any DPI setting. (Height stays a fixed, reasonable size — the
+        # page scrolls vertically on purpose, so extra height just means
+        # less scrolling, never anything clipped.)
+        self.update_idletasks()
+        fit_w = min(self.content.winfo_reqwidth() + 50,
+                   self.winfo_screenwidth() - 80)
+        fit_h = min(820, self.winfo_screenheight() - 120)
+        self.geometry(f"{fit_w}x{fit_h}")
 
         # When the user clicks the X, run OUR function instead of quitting.
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -532,8 +696,63 @@ class CountdownApp(ctk.CTk):
                 pass
 
         self._tick()            # start the clock ticking!
-        self._cycle_members()   # start spotlighting members
+        self._cycle_members()   # start swapping member photos
         self._cycle_group()     # start swapping the group photo
+
+    # ---------- Light mode / dark mode ----------
+
+    def _apply_theme(self):
+        """Work out which colors to paint with, based on light/dark mode.
+
+        Everything else in the app reads colors off of "self" (like
+        self.BG_MAIN) instead of a fixed value, so flipping this and
+        redrawing the window is all it takes to re-theme everything.
+        """
+        theme = THEMES["dark" if self.dark_mode else "light"]
+        for key, value in theme.items():
+            setattr(self, key, value)
+        ctk.set_appearance_mode("dark" if self.dark_mode else "light")
+
+    def _on_dark_mode_toggled(self):
+        """The 'Dark mode' switch in Settings was flipped."""
+        self.dark_mode = bool(self.dark_mode_switch.get())
+        self.settings["dark_mode"] = self.dark_mode
+        save_settings(self.settings)
+        self._apply_theme()
+        # Placeholder pictures have the OLD border color baked in — throw
+        # away the picture cache so they get redrawn in the new theme.
+        self._img_cache.clear()
+        self._img_cache_raw.clear()
+        # The settings window is about to be torn down along with
+        # everything else, so close it first.
+        if self.settings_win is not None and self.settings_win.winfo_exists():
+            self.settings_win.destroy()
+        self.settings_win = None
+        self._rebuild_ui()
+
+    def _rebuild_ui(self):
+        """Tear down and redraw the whole window.
+
+        Re-coloring every single widget by hand when the theme changes
+        would be a mess to keep correct — instead we just throw the old
+        page away and build a fresh one, the same way it looked the first
+        time the app opened.
+        """
+        for job_name in ("_tick_job", "_member_job", "_group_job"):
+            job_id = getattr(self, job_name)
+            if job_id is not None:
+                self.after_cancel(job_id)
+                setattr(self, job_name, None)
+        self.page.destroy()
+        self.configure(fg_color=self.BG_MAIN)
+        # The countdown boxes are BRAND NEW widgets that still just say
+        # "--" — forget what we last painted, or _tick() will wrongly
+        # think nothing changed and leave them showing "--" forever.
+        self._last_shown = {}
+        self._build_ui()
+        self._tick()
+        self._cycle_members()
+        self._cycle_group()
 
     # ---------- Loading pictures (with a memory-saving cache) ----------
 
@@ -558,13 +777,18 @@ class CountdownApp(ctk.CTk):
         try:
             if path and os.path.exists(path):
                 pic = Image.open(path)           # a real photo exists — use it!
+                if pic.mode not in ("RGB", "RGBA"):
+                    pic = pic.convert("RGBA")
+                # SHARPNESS: shrink with a high-quality filter ourselves.
+                # Image.LANCZOS keeps real photos crisp instead of blurry.
+                pic = pic.resize(size, Image.LANCZOS)
         except Exception:
             pic = None
         if pic is None:                          # no photo? draw a placeholder
             if kind == "member":
-                pic = _make_member_placeholder(meta, size)
+                pic = _make_member_placeholder(meta, size, self.CARD_BORDER)
             elif kind == "group":
-                pic = _make_group_placeholder(meta, size)
+                pic = _make_group_placeholder(meta, size, self.CARD_BORDER)
             else:  # logo
                 label, color = meta
                 pic = _make_logo_placeholder(label, color, size)
@@ -573,9 +797,120 @@ class CountdownApp(ctk.CTk):
         self._img_cache[cache_key] = image
         return image
 
-    def _member_photo(self, file_name, name, size):
-        """Get a member's photo (or their placeholder)."""
-        path = resource_path(os.path.join("assets", "members", file_name))
+    # ---------- The seven-segment countdown digits ----------
+
+    def _digit_glyphs(self, w, h, glow):
+        """Return the 10 digit pictures (0-9) at their real on-screen size,
+        drawing each one only once and reusing it forever after (just like
+        our other picture caches) — recomposing a whole number is then
+        just pasting a couple of these together, which is cheap enough to
+        do every tick.
+
+        SHARPNESS: we draw each glyph _SEG_SUPERSAMPLE times BIGGER than
+        needed, then shrink it down to the real size OURSELVES with
+        Image.LANCZOS (a sharp, high-quality filter). If we handed CTkImage
+        the oversized picture and let IT do the one and only shrink, it
+        uses a plainer filter that comes out noticeably softer — doing the
+        careful shrink ourselves first is what actually fixes the blur.
+        """
+        cache_key = ("digitset", w, h, glow, self.dark_mode)
+        if cache_key not in self._img_cache_raw:
+            big_w, big_h = w * _SEG_SUPERSAMPLE, h * _SEG_SUPERSAMPLE
+            self._img_cache_raw[cache_key] = {
+                ch: _seven_segment_digit(ch, big_w, big_h, ACCENT,
+                                         self.SEG_OFF, glow)
+                    .resize((w, h), Image.LANCZOS)
+                for ch in "0123456789"
+            }
+        return self._img_cache_raw[cache_key]
+
+    def _number_image(self, text, w, h, glow=False, gap=6):
+        """Turn a short string of digits into one seven-segment picture."""
+        glyphs = self._digit_glyphs(w, h, glow)
+        total_w = len(text) * w + (len(text) - 1) * gap
+        canvas = Image.new("RGBA", (total_w, h), (0, 0, 0, 0))
+        x = 0
+        for ch in text:
+            canvas.alpha_composite(glyphs.get(ch, glyphs["0"]), (x, 0))
+            x += w + gap
+        return ctk.CTkImage(light_image=canvas, dark_image=canvas,
+                            size=(total_w, h))
+
+    # ---------- The faint circuit-board background ----------
+
+    def _pcb_pattern_image(self, w, h):
+        """Draw a very faint dot-grid — a subtle 'circuit board' texture.
+
+        Drawn once and cached (like our other pictures), so it costs
+        nothing extra on every tick — it's just a picture sitting there.
+        """
+        cache_key = ("pcb", w, h, self.dark_mode)
+        if cache_key not in self._img_cache_raw:
+            img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            d = ImageDraw.Draw(img)
+            # A faint red dot at every grid intersection — barely there,
+            # just enough to hint at a circuit board underneath.
+            alpha = 22 if self.dark_mode else 14
+            dot_color = (228, 0, 43, alpha)
+            step = 22
+            for y in range(0, h, step):
+                for x in range(0, w, step):
+                    d.ellipse([x, y, x + 2, y + 2], fill=dot_color)
+            self._img_cache_raw[cache_key] = img
+        return self._img_cache_raw[cache_key]
+
+    def _paint_pcb_background(self, frame, w=900, h=170):
+        """Put the faint dot-grid picture behind a frame's content, like a
+        circuit board peeking through underneath — a cheap, one-time-drawn
+        decoration, not redrawn per frame."""
+        if not PIL_AVAILABLE:
+            return
+        pic = self._pcb_pattern_image(w, h)
+        img = ctk.CTkImage(light_image=pic, dark_image=pic, size=(w, h))
+        bg_label = ctk.CTkLabel(frame, text="", image=img)
+        bg_label.place(relx=0.5, rely=0, anchor="n")
+        bg_label.lower()   # keep it BEHIND the real content in the frame
+
+    def _find_member_photos(self, file_name):
+        """Find every real photo we have for one member.
+
+        Looks for a FOLDER of numbered photos first (e.g.
+        assets/members/1_bang_chan/1.png, 2.png, ...) so we can cycle
+        through several; if there's no folder, falls back to the single
+        flat file (e.g. assets/members/1_bang_chan.png); if neither
+        exists, returns an empty list and the app draws a placeholder.
+        """
+        base = os.path.splitext(file_name)[0]
+        folder = resource_path(os.path.join("assets", "members", base))
+        paths = []
+        if os.path.isdir(folder):
+            i = 1
+            while True:
+                found = None
+                for ext in (".png", ".jpg", ".jpeg"):
+                    candidate = os.path.join(folder, f"{i}{ext}")
+                    if os.path.exists(candidate):
+                        found = candidate
+                        break
+                if not found:
+                    break
+                paths.append(found)
+                i += 1
+        if not paths:
+            flat = resource_path(os.path.join("assets", "members", file_name))
+            if os.path.exists(flat):
+                paths.append(flat)
+        return paths
+
+    def _member_photo(self, index, photo_index, size):
+        """Get one specific photo for one member, at a given size (or
+        their placeholder, if that member has no real photo yet)."""
+        name, file_name = MEMBERS[index]
+        paths = self._member_photo_paths[index]
+        # Even with no real photo, we pass a stable (non-existent) path so
+        # every member still gets their OWN cached placeholder picture.
+        path = paths[photo_index] if paths else resource_path(
+            os.path.join("assets", "members", file_name))
         return self._get_image(path, size, "member", name)
 
     def _group_photo(self, index, size):
@@ -606,27 +941,49 @@ class CountdownApp(ctk.CTk):
     def _load_logos(self):
         """Open the Stray Kids photo and the "This & That" title picture."""
         self.skz_logo_image = None   # the round Stray Kids photo (header)
+        self.skz_logo_source = None  # the original picture (for the tray icon)
         self.tt_logo_image = None    # the "This & That" title picture
+        self._icon_photos = []       # crisp small copies, for every window
+        self._icon_ico_path = None   # a real .ico file (Windows only)
         if not PIL_AVAILABLE:
             return
 
         try:
-            skz_pic = Image.open(resource_path(SKZ_LOGO_FILE))
+            skz_pic = Image.open(resource_path(SKZ_LOGO_FILE)).convert("RGBA")
+            self.skz_logo_source = skz_pic
+
+            # MEMORY SAVER / SHARPNESS: shrink with a high-quality filter
+            # OURSELVES before handing the picture to CTkImage. Letting the
+            # widget toolkit stretch a big picture down to a small box uses
+            # a blurrier filter and can look pixelated — doing it first
+            # with Image.LANCZOS (a much crisper filter) fixes that.
+            header_pic = skz_pic.resize((76, 76), Image.LANCZOS)
             self.skz_logo_image = ctk.CTkImage(
-                light_image=skz_pic, dark_image=skz_pic, size=(76, 76))
-            # The taskbar/title-bar icon needs a plain Tk picture.
-            self._icon_photo = ImageTk.PhotoImage(skz_pic)
-            self.iconphoto(True, self._icon_photo)
+                light_image=header_pic, dark_image=header_pic, size=(76, 76))
+
+            # Make a handful of ready-made small sizes for title bars and
+            # taskbars. Giving Windows several crisp, exact-size copies
+            # (instead of one huge picture it has to shrink itself) is what
+            # keeps every window's icon looking sharp instead of blocky.
+            self._icon_photos = [
+                ImageTk.PhotoImage(skz_pic.resize((s, s), Image.LANCZOS))
+                for s in (16, 20, 24, 32, 40, 48, 64)
+            ]
 
             if IS_WINDOWS:
                 # customtkinter secretly swaps the titlebar icon back to its
                 # own logo unless we've set an .ico ourselves — so we do.
-                ico_path = os.path.join(_cfg_dir, "skz_countdown_icon.ico")
+                # A generous list of sizes means Windows almost always finds
+                # an exact match instead of stretching a mismatched one.
+                self._icon_ico_path = os.path.join(
+                    _cfg_dir, "skz_countdown_icon.ico")
+                ico_sizes = [16, 20, 24, 32, 40, 48, 64, 96, 128, 256]
                 skz_pic.save(
-                    ico_path, format="ICO",
-                    sizes=[(256, 256), (64, 64), (32, 32), (16, 16)],
+                    self._icon_ico_path, format="ICO",
+                    sizes=[(s, s) for s in ico_sizes],
                 )
-                self.iconbitmap(ico_path)
+
+            self._set_window_icon(self)
         except Exception:
             pass  # a missing picture should never crash the countdown
 
@@ -635,11 +992,28 @@ class CountdownApp(ctk.CTk):
             width, height = tt_pic.size
             target_h = 66
             target_w = int(width * (target_h / height))
+            tt_pic = tt_pic.resize((target_w, target_h), Image.LANCZOS)
             self.tt_logo_image = ctk.CTkImage(
                 light_image=tt_pic, dark_image=tt_pic,
                 size=(target_w, target_h))
         except Exception:
             pass
+
+    def _set_window_icon(self, window):
+        """Put the Stray Kids picture in one window's title bar/taskbar spot.
+
+        Every separate window — the main one, Settings, a member's pop-up —
+        has to be told about the icon on its own; Windows doesn't share it
+        automatically between windows.
+        """
+        if not self._icon_photos:
+            return
+        try:
+            window.iconphoto(True, *self._icon_photos)
+            if IS_WINDOWS and self._icon_ico_path:
+                window.iconbitmap(self._icon_ico_path)
+        except Exception:
+            pass  # a window without our icon should never crash the app
 
     # ---------- Opening web links ----------
 
@@ -650,12 +1024,17 @@ class CountdownApp(ctk.CTk):
     # ---------- Small building-block helpers ----------
 
     def _section_header(self, parent, text):
-        """A '// TITLE' row that looks like a code comment, with a red line."""
+        """A '// TITLE' row that looks like a code comment, with a line.
+
+        The leading "//" is our one recurring slash motif, tying every
+        section back to the same "circuit trace" divider style — that's
+        why this text stays red even though most decoration doesn't.
+        """
         row = ctk.CTkFrame(parent, fg_color="transparent")
         row.grid_columnconfigure(1, weight=1)
         ctk.CTkLabel(row, text=text, font=self._font_section,
                      text_color=ACCENT).grid(row=0, column=0, sticky="w")
-        ctk.CTkFrame(row, height=2, fg_color="#E7E7EB",
+        ctk.CTkFrame(row, height=2, fg_color=self.DIVIDER,
                      corner_radius=0).grid(row=0, column=1, sticky="ew",
                                            padx=(12, 0), pady=(2, 0))
         return row
@@ -669,7 +1048,7 @@ class CountdownApp(ctk.CTk):
 
         # A scrollable page, so even on a small screen you can scroll to see
         # everything — and on a huge full-screen monitor nothing gets cut off.
-        self.page = ctk.CTkScrollableFrame(self, fg_color=BG_MAIN)
+        self.page = ctk.CTkScrollableFrame(self, fg_color=self.BG_MAIN)
         self.page.grid(row=0, column=0, sticky="nsew")
         # Three columns: empty | content | empty. The empty sides grow on big
         # screens so the middle content stays centered and easy to read.
@@ -695,21 +1074,56 @@ class CountdownApp(ctk.CTk):
         self._build_footer(c, r); r += 1
 
     def _build_statusbar(self, parent, row):
-        """A thin monospace strip up top — the 'engineering console' touch."""
-        tz_name = RELEASE_LOCAL.strftime("%Z") or str(LOCAL_TZ)
-        bar = ctk.CTkFrame(parent, fg_color=FG_STRONG, corner_radius=6)
+        """A thin monospace strip up top — the 'engineering console' touch.
+
+        On launch it "boots up": one line of text types itself out, then a
+        cursor block keeps softly blinking, like a real machine powering on.
+        """
+        bar = ctk.CTkFrame(parent, fg_color=STATUS_BAR_BG, corner_radius=6)
         bar.grid(row=row, column=0, sticky="ew", pady=(8, 14))
-        bar.grid_columnconfigure(1, weight=1)
-        ctk.CTkLabel(
-            bar, text=f"  ● {APP_NAME.lower().replace(' ', '-')} v{APP_VERSION}",
+        bar.grid_columnconfigure(0, weight=1)
+        self.boot_label = ctk.CTkLabel(
+            bar, text="", anchor="w",
             font=ctk.CTkFont(family=MONO_FONT, size=11, weight="bold"),
             text_color="#FFFFFF",
-        ).grid(row=0, column=0, sticky="w", pady=4)
-        ctk.CTkLabel(
-            bar, text=f"tz-sync: Asia/Seoul → {tz_name}  ",
-            font=ctk.CTkFont(family=MONO_FONT, size=11),
-            text_color="#B9B9C2",
-        ).grid(row=0, column=2, sticky="e", pady=4, padx=(0, 4))
+        )
+        self.boot_label.grid(row=0, column=0, sticky="ew", padx=(10, 10),
+                             pady=6)
+        self._start_boot_sequence()
+
+    def _start_boot_sequence(self):
+        """Kick off the typed 'booting up' line in the status bar."""
+        self._boot_generation += 1   # cancels any earlier boot animation
+        target = RELEASE_DT.strftime("%Y-%m-%dT%H:%M") + "+09:00"
+        self._boot_full_text = (
+            f"> booting {APP_NAME.lower().replace(' ', '-')} "
+            f"v{APP_VERSION}... tz-sync OK... target: {target} [LOCKED]"
+        )
+        self._boot_progress = 0
+        self._type_boot_line(self._boot_generation)
+
+    def _type_boot_line(self, generation):
+        """Reveal one more character of the boot line, then schedule the
+        next one a moment later — cheap to do, and it looks like a machine
+        booting up instead of text just appearing all at once."""
+        if generation != self._boot_generation:
+            return   # a newer boot sequence started (e.g. the theme changed)
+        self._boot_progress += 1
+        shown = self._boot_full_text[:self._boot_progress]
+        cursor = "█" if self._boot_progress % 2 == 0 else " "
+        self.boot_label.configure(text=shown + cursor)
+        if self._boot_progress < len(self._boot_full_text):
+            self.after(BOOT_TYPE_MS, lambda: self._type_boot_line(generation))
+        else:
+            self._blink_boot_cursor(generation, True)
+
+    def _blink_boot_cursor(self, generation, on):
+        """Once the line has finished typing, blink a soft cursor block
+        forever — a tiny, cheap 'still alive' touch."""
+        if generation != self._boot_generation:
+            return
+        self.boot_label.configure(text=self._boot_full_text + ("█" if on else " "))
+        self.after(BOOT_BLINK_MS, lambda: self._blink_boot_cursor(generation, not on))
 
     def _build_header(self, parent, row):
         """The logo, title art, and the exact local release time."""
@@ -722,7 +1136,7 @@ class CountdownApp(ctk.CTk):
                 pady=(0, 6))
         ctk.CTkLabel(
             header, text="STRAY KIDS", font=ctk.CTkFont(size=15, weight="bold"),
-            text_color=FG_DIM,
+            text_color=self.FG_DIM,
         ).pack()
 
         if self.tt_logo_image is not None:
@@ -735,8 +1149,8 @@ class CountdownApp(ctk.CTk):
             ).pack(pady=(6, 0))
 
         ctk.CTkLabel(
-            header, text="Drops August 7, 2026 · 1:00 PM KST",
-            font=ctk.CTkFont(size=13), text_color=FG_DIM,
+            header, text="Drops August 7, 2026 · 1:00 PM KST — for STAY",
+            font=ctk.CTkFont(size=13), text_color=self.FG_DIM,
         ).pack(pady=(6, 0))
 
         tz_name = RELEASE_LOCAL.strftime("%Z") or str(LOCAL_TZ)
@@ -744,7 +1158,7 @@ class CountdownApp(ctk.CTk):
             "%A, %B %d, %Y · %I:%M %p").replace(" 0", " ")
         ctk.CTkLabel(
             header, text=f"Your local time: {local_str} ({tz_name})",
-            font=ctk.CTkFont(size=13, weight="bold"), text_color=FG_STRONG,
+            font=ctk.CTkFont(size=13, weight="bold"), text_color=self.FG_STRONG,
         ).pack(pady=(2, 0))
 
         # A thin red circuit-trace line under the header.
@@ -752,35 +1166,47 @@ class CountdownApp(ctk.CTk):
             fill="x", padx=60, pady=(14, 0))
 
     def _build_countdown(self, parent, row):
-        """The five big number boxes: weeks, days, hours, minutes, seconds."""
+        """The five big number boxes: weeks, days, hours, minutes, seconds.
+
+        The numbers themselves are drawn as seven-segment "LED" digits —
+        see _seven_segment_digit(). Only the SECONDS box gets a red
+        outline and a soft glow: it's the one thing that's always actively
+        ticking, so it's the one box red is allowed to decorate.
+        """
         wrap = ctk.CTkFrame(parent, fg_color="transparent")
         wrap.grid(row=row, column=0, sticky="ew", pady=(16, 6))
         wrap.grid_columnconfigure(0, weight=1)
+        self._paint_pcb_background(wrap)   # a faint circuit-board texture
 
         units = ctk.CTkFrame(wrap, fg_color="transparent")
         units.grid(row=0, column=0)
         self.unit_labels = {}
         for i, name in enumerate(["WEEKS", "DAYS", "HOURS", "MINUTES",
                                   "SECONDS"]):
-            # Each box has a thin red outline, like a little circuit chip.
-            card = ctk.CTkFrame(units, corner_radius=10, fg_color=BG_CARD,
-                                border_width=1, border_color=ACCENT, width=150)
+            is_seconds = name == "SECONDS"
+            border = ACCENT if is_seconds else self.CARD_BORDER
+            card = ctk.CTkFrame(units, corner_radius=10, fg_color=self.BG_CARD,
+                                border_width=1, border_color=border, width=168)
             card.grid(row=0, column=i, padx=6, sticky="nsew")
             card.grid_propagate(False)
-            card.configure(height=120)
+            card.configure(height=148)
             value = ctk.CTkLabel(card, text="--", font=self._font_num,
-                                 text_color=FG_STRONG)
+                                 text_color=self.FG_STRONG)
             value.pack(pady=(24, 0))
             ctk.CTkLabel(card, text=name, font=self._font_unit,
-                         text_color=FG_DIM).pack(pady=(2, 14))
+                         text_color=self.FG_DIM).pack(pady=(2, 14))
             self.unit_labels[name] = value
 
         self.status_label = ctk.CTkLabel(
-            wrap, text="", font=self._font_status, text_color=FG_DIM)
+            wrap, text="", font=self._font_status, text_color=self.FG_DIM)
         self.status_label.grid(row=1, column=0, pady=(12, 0))
 
     def _build_album_links(self, parent, row):
-        """Buttons that jump straight to the album online."""
+        """Buttons that jump straight to the album online.
+
+        Each label ends with a small "↗" arrow — a quiet, consistent hint
+        that the button leaves the app and opens a web page.
+        """
         box = ctk.CTkFrame(parent, fg_color="transparent")
         box.grid(row=row, column=0, sticky="ew", pady=(20, 6))
         box.grid_columnconfigure(0, weight=1)
@@ -792,40 +1218,86 @@ class CountdownApp(ctk.CTk):
         for i, (label, url, color, logo_file) in enumerate(ALBUM_LINKS):
             logo = self._logo_image(logo_file, label, color, (22, 22))
             btn = ctk.CTkButton(
-                btns, text=f"  {label}", image=logo, compound="left",
+                btns, text=f"  {label} ↗", image=logo, compound="left",
                 fg_color=color, hover_color=color, text_color="#FFFFFF",
-                font=ctk.CTkFont(size=13, weight="bold"), height=42,
-                corner_radius=8,
+                font=ctk.CTkFont(family=MONO_FONT, size=13, weight="bold"),
+                height=42, corner_radius=8,
                 command=lambda u=url: self._open_url(u),
             )
             btn.grid(row=0, column=i, padx=6)
 
     def _build_members(self, parent, row):
-        """8 columns — one per member — that light up one at a time."""
+        """8 columns — one per member — click one to learn more.
+
+        Cards keep a plain neutral outline until you hover one: THEN it
+        lights up red and its little mono tag flips to a "status readout" —
+        red still means "the thing that's active right now," it's just the
+        mouse deciding what's active instead of an automatic timer.
+        """
         box = ctk.CTkFrame(parent, fg_color="transparent")
         box.grid(row=row, column=0, sticky="ew", pady=(24, 6))
         box.grid_columnconfigure(0, weight=1)
-        self._section_header(box, "// MEMBERS  (spotlight cycles)").grid(
+        self._section_header(box, "// MEMBERS · OT8  (click one to learn more)").grid(
             row=0, column=0, sticky="ew")
 
         strip = ctk.CTkFrame(box, fg_color="transparent")
         strip.grid(row=1, column=0, pady=(14, 0))
 
-        self.member_cards = []   # remember each card so we can highlight it
-        thumb_size = (94, 126)
+        # Work out (once) which real photos each member has, so we know
+        # what to shuffle through later.
+        self._member_photo_paths = [
+            self._find_member_photos(file_name) for _name, file_name in MEMBERS
+        ]
+        self._member_current = [0] * len(MEMBERS)   # which photo is showing now
+        self._member_thumb_size = (94, 126)
+
+        self.member_cards = []          # (card, name_label) per member
+        self.member_photo_labels = []   # the photo CTkLabel per member
+        self.member_meta_labels = []    # the small mono "#01" tag per member
         for i, (name, file_name) in enumerate(MEMBERS):
-            # Each member gets a column: a photo card + their name below.
-            card = ctk.CTkFrame(strip, corner_radius=10, fg_color=BG_CARD,
-                                border_width=2, border_color="#E2E2E7")
+            card = ctk.CTkFrame(strip, corner_radius=10, fg_color=self.BG_CARD,
+                                border_width=2, border_color=self.CARD_BORDER)
             card.grid(row=0, column=i, padx=3, sticky="n")
-            photo = self._member_photo(file_name, name, thumb_size)
+            photo = self._member_photo(i, 0, self._member_thumb_size)
             img_label = ctk.CTkLabel(card, text="", image=photo)
             img_label.pack(padx=6, pady=6)
             name_label = ctk.CTkLabel(
                 card, text=name, font=ctk.CTkFont(size=11, weight="bold"),
-                text_color=FG_DIM)
-            name_label.pack(pady=(0, 8))
+                text_color=self.FG_STRONG)
+            name_label.pack()
+            meta_label = ctk.CTkLabel(
+                card, text=f"#{i + 1:02d}", font=self._font_mono_small,
+                text_color=self.FG_DIM)
+            meta_label.pack(pady=(0, 8))
+
+            # Clicking anywhere on the card opens that member's info pop-up;
+            # hovering it is the one moment red is allowed to show up here.
+            for widget in (card, img_label, name_label, meta_label):
+                widget.bind("<Button-1>",
+                            lambda _e, idx=i: self._open_member_popup(idx))
+                widget.bind("<Enter>",
+                            lambda _e, idx=i: self._on_member_hover(idx, True))
+                widget.bind("<Leave>",
+                            lambda _e, idx=i: self._on_member_hover(idx, False))
+                try:
+                    widget.configure(cursor="hand2")   # hint it's clickable
+                except Exception:
+                    pass
+
             self.member_cards.append((card, name_label))
+            self.member_photo_labels.append(img_label)
+            self.member_meta_labels.append(meta_label)
+
+    def _on_member_hover(self, index, entering):
+        """The mouse entered or left one member's card."""
+        card, _name_label = self.member_cards[index]
+        meta_label = self.member_meta_labels[index]
+        if entering:
+            card.configure(border_color=ACCENT)
+            meta_label.configure(text="STATUS: OT8 ✓", text_color=ACCENT)
+        else:
+            card.configure(border_color=self.CARD_BORDER)
+            meta_label.configure(text=f"#{index + 1:02d}", text_color=self.FG_DIM)
 
     def _build_group(self, parent, row):
         """A wider area that cycles through group photos."""
@@ -835,10 +1307,11 @@ class CountdownApp(ctk.CTk):
         self._section_header(box, "// GROUP").grid(
             row=0, column=0, sticky="ew")
 
-        frame = ctk.CTkFrame(box, corner_radius=10, fg_color=BG_CARD,
-                             border_width=1, border_color="#E2E2E7")
+        frame = ctk.CTkFrame(box, corner_radius=10, fg_color=self.BG_CARD,
+                             border_width=2, border_color=self.CARD_BORDER)
         frame.grid(row=1, column=0, pady=(14, 0))
         self._group_size = (560, 300)
+        self._group_index = 1   # matches the photo we show first, below
         first = self._group_photo(1, self._group_size)
         self.group_label = ctk.CTkLabel(frame, text="", image=first)
         self.group_label.pack(padx=10, pady=10)
@@ -860,20 +1333,21 @@ class CountdownApp(ctk.CTk):
                 w, h = pic.size
                 target_w = 420
                 target_h = int(h * (target_w / w))
+                pic = pic.resize((target_w, target_h), Image.LANCZOS)
                 img = ctk.CTkImage(light_image=pic, dark_image=pic,
                                    size=(target_w, target_h))
         except Exception:
             img = None
 
-        frame = ctk.CTkFrame(box, corner_radius=10, fg_color=BG_CARD,
-                             border_width=1, border_color=ACCENT)
+        frame = ctk.CTkFrame(box, corner_radius=10, fg_color=self.BG_CARD,
+                             border_width=1, border_color=self.CARD_BORDER)
         frame.grid(row=1, column=0, pady=(14, 0))
         if img is not None:
             ctk.CTkLabel(frame, text="", image=img).pack(padx=12, pady=12)
         else:
             ctk.CTkLabel(
                 frame, text="tracklist.png not found",
-                font=self._font_status, text_color=FG_DIM,
+                font=self._font_status, text_color=self.FG_DIM,
             ).pack(padx=40, pady=40)
 
     def _build_footer(self, parent, row):
@@ -893,17 +1367,18 @@ class CountdownApp(ctk.CTk):
         ).grid(row=0, column=0, padx=6)
 
         # The GitHub button — with a logo (or a lettered placeholder).
-        gh_logo = self._logo_image("github.png", "GitHub", CHIP_DARK, (20, 20))
+        gh_logo = self._logo_image("github.png", "GitHub", self.CHIP_DARK, (20, 20))
         ctk.CTkButton(
-            btns, text="  View on GitHub", image=gh_logo, compound="left",
-            fg_color=CHIP_DARK, hover_color="#232326", border_width=1,
-            border_color=CHIP_TEXT, text_color=CHIP_TEXT, height=40,
+            btns, text="  GitHub ↗", image=gh_logo, compound="left",
+            fg_color=self.CHIP_DARK, hover_color=ACCENT_HOVER, border_width=1,
+            border_color=self.CHIP_TEXT, text_color=self.CHIP_TEXT, height=40,
+            font=ctk.CTkFont(family=MONO_FONT, size=13),
             command=lambda: self._open_url(REPO_URL),
         ).grid(row=0, column=1, padx=6)
 
         ctk.CTkButton(
-            btns, text="Quit app", fg_color=CHIP_DARK, hover_color="#232326",
-            border_width=1, border_color=FG_DIM, text_color=CHIP_TEXT,
+            btns, text="Quit app", fg_color=self.CHIP_DARK, hover_color=ACCENT_HOVER,
+            border_width=1, border_color=self.FG_DIM, text_color=self.CHIP_TEXT,
             height=40, command=self._quit_app,
         ).grid(row=0, column=2, padx=6)
 
@@ -918,13 +1393,13 @@ class CountdownApp(ctk.CTk):
             hint = ("Install pystray + Pillow to keep the app running when "
                     "the window is closed.")
         ctk.CTkLabel(box, text=hint, font=ctk.CTkFont(size=12),
-                     text_color=FG_DIM).grid(row=1, column=0, pady=(14, 2))
+                     text_color=self.FG_DIM).grid(row=1, column=0, pady=(14, 2))
 
         ctk.CTkLabel(
-            box, text=("Member & group images are placeholders — add your own "
-                       "in assets/. Stray Kids icon via Icons8 · Album art via "
-                       "Spotify."),
-            font=ctk.CTkFont(size=10), text_color=FG_DIM, wraplength=560,
+            box, text=("Made for STAY. Member & group images are placeholders "
+                       "— add your own in assets/. Stray Kids icon via Icons8 "
+                       "· Album art via Spotify."),
+            font=ctk.CTkFont(size=10), text_color=self.FG_DIM, wraplength=560,
         ).grid(row=2, column=0, pady=(0, 6))
 
     # ---------- The pop-up Settings window ----------
@@ -940,19 +1415,34 @@ class CountdownApp(ctk.CTk):
 
         win = ctk.CTkToplevel(self)
         win.title(f"{APP_NAME} — Settings")
-        win.geometry("420x430")
-        win.configure(fg_color=BG_MAIN)
+        win.geometry("420x520")
+        win.configure(fg_color=self.BG_MAIN)
         win.transient(self)          # keep it attached to the main window
+        self._set_window_icon(win)   # give this window our icon too
         self.settings_win = win
 
         ctk.CTkLabel(
-            win, text="// NOTIFICATIONS", font=self._font_section,
+            win, text="// APPEARANCE", font=self._font_section,
             text_color=ACCENT).pack(anchor="w", padx=20, pady=(18, 0))
+        appearance_row = ctk.CTkFrame(win, fg_color="transparent")
+        appearance_row.pack(fill="x", padx=20, pady=(10, 4))
+        ctk.CTkLabel(appearance_row, text="Dark mode",
+                     font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
+        self.dark_mode_switch = ctk.CTkSwitch(
+            appearance_row, text="", progress_color=ACCENT,
+            command=self._on_dark_mode_toggled)
+        self.dark_mode_switch.pack(side="right")
+        if self.dark_mode:
+            self.dark_mode_switch.select()
+
+        ctk.CTkLabel(
+            win, text="// STAY ALERTS", font=self._font_section,
+            text_color=ACCENT).pack(anchor="w", padx=20, pady=(14, 0))
 
         # The big ON/OFF switch for all notifications.
         top = ctk.CTkFrame(win, fg_color="transparent")
         top.pack(fill="x", padx=20, pady=(10, 4))
-        ctk.CTkLabel(top, text="All notifications",
+        ctk.CTkLabel(top, text="All STAY alerts",
                      font=ctk.CTkFont(size=13, weight="bold")).pack(side="left")
         self.master_switch = ctk.CTkSwitch(
             top, text="", progress_color=ACCENT,
@@ -985,10 +1475,46 @@ class CountdownApp(ctk.CTk):
             hover_color=ACCENT_HOVER, command=self._test_notification,
         ).pack(padx=20, pady=(18, 12))
 
+    # ---------- The pop-up "about this member" window ----------
+
+    def _open_member_popup(self, index):
+        """Show one member's photo, name, and a short description."""
+        name, _file_name = MEMBERS[index]
+        description = MEMBER_DESCRIPTIONS.get(name, "")
+
+        win = ctk.CTkToplevel(self)
+        win.title(f"{APP_NAME} — {name}")
+        win.geometry("360x480")
+        win.configure(fg_color=self.BG_MAIN)
+        win.transient(self)
+        self._set_window_icon(win)   # this pop-up gets our icon too
+
+        # A bigger version of whichever photo that member is showing
+        # right now (loaded fresh at a bigger size — our picture cache
+        # remembers it, so re-opening the same member is instant).
+        big_size = (200, 268)
+        photo = self._member_photo(index, self._member_current[index], big_size)
+        ctk.CTkLabel(win, text="", image=photo).pack(pady=(26, 12))
+        ctk.CTkLabel(
+            win, text=name, font=ctk.CTkFont(size=20, weight="bold"),
+            text_color=self.FG_STRONG,
+        ).pack()
+        ctk.CTkLabel(
+            win, text=f"#{index + 1:02d}  ·  OT8", font=self._font_mono_small,
+            text_color=self.FG_DIM,
+        ).pack(pady=(2, 0))
+        ctk.CTkLabel(
+            win, text=description, font=ctk.CTkFont(size=13),
+            text_color=self.FG_DIM, wraplength=300, justify="center",
+        ).pack(padx=24, pady=(12, 20))
+
     # ---------- The tray icon (Windows / Linux only) ----------
 
     def _make_tray_image(self):
-        """Draw a tiny red circle to be our tray icon picture."""
+        """Draw our tray icon: the real Stray Kids picture if we have it,
+        otherwise a simple red circle so the app still looks finished."""
+        if self.skz_logo_source is not None:
+            return self.skz_logo_source.resize((64, 64), Image.LANCZOS)
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))  # see-through square
         d = ImageDraw.Draw(img)
         d.ellipse([4, 4, 60, 60], fill=ACCENT)       # big red circle
@@ -998,10 +1524,14 @@ class CountdownApp(ctk.CTk):
     def _start_tray(self):
         """Put our icon next to the clock, with a right-click menu."""
         try:
+            # A thin separator line before "Quit" is a small, modern touch —
+            # it visually sets the one-way, exit-the-app action apart from
+            # the safe "just open the window" one above it.
             menu = pystray.Menu(
                 pystray.MenuItem("Open SKZ Countdown", self._tray_show,
                                  default=True),   # double-click = open
-                pystray.MenuItem("Quit", self._tray_quit),
+                pystray.Menu.SEPARATOR,
+                pystray.MenuItem("Quit SKZ Countdown", self._tray_quit),
             )
             self.tray_icon = pystray.Icon(
                 APP_NAME, self._make_tray_image(), APP_NAME, menu)
@@ -1082,30 +1612,37 @@ class CountdownApp(ctk.CTk):
         """The test button — send a practice pop-up."""
         send_notification(APP_NAME, f"Test toast! Counting down to {ALBUM_NAME} 🎧")
 
-    # ---------- The member spotlight (cycles one at a time) ----------
+    # ---------- The member photo shuffle (every card stays lit up) ----------
 
     def _cycle_members(self):
-        """Light up the next member's card, dim the rest. Very cheap — it
-        only changes border colors, so it's easy on memory and battery."""
+        """Give any member with more than one photo a fresh random one —
+        shuffled so the same picture never shows twice in a row. Members
+        with only one photo (or none yet) just stay put. Borders always
+        stay lit; only the picture inside ever changes."""
         if not self.member_cards:
             return
         if self.state() != "withdrawn":   # don't bother while hidden
-            for i, (card, name_label) in enumerate(self.member_cards):
-                if i == self._member_index:
-                    card.configure(border_color=ACCENT)          # the star!
-                    name_label.configure(text_color=FG_STRONG)
-                else:
-                    card.configure(border_color="#E2E2E7")       # resting
-                    name_label.configure(text_color=FG_DIM)
-            self._member_index = (self._member_index + 1) % len(self.member_cards)
+            for i in range(len(MEMBERS)):
+                paths = self._member_photo_paths[i]
+                if len(paths) < 2:
+                    continue   # nothing to shuffle for this member yet
+                choices = [j for j in range(len(paths))
+                           if j != self._member_current[i]]
+                self._member_current[i] = random.choice(choices)
+                photo = self._member_photo(
+                    i, self._member_current[i], self._member_thumb_size)
+                self.member_photo_labels[i].configure(image=photo)
         self._member_job = self.after(MEMBER_CYCLE_MS, self._cycle_members)
 
     def _cycle_group(self):
-        """Swap to the next group photo every few seconds (only if there is
-        more than one, and only while the window is visible)."""
+        """Swap to a fresh random group photo every few seconds — shuffled
+        so the same picture never shows twice in a row. Only bothers if
+        there's more than one, and only while the window is visible. The
+        frame around it always stays lit up."""
         total = self._count_group_photos()
         if total > 1 and self.state() != "withdrawn":
-            self._group_index = (self._group_index % total) + 1
+            choices = [i for i in range(1, total + 1) if i != self._group_index]
+            self._group_index = random.choice(choices)
             self.group_label.configure(
                 image=self._group_photo(self._group_index, self._group_size))
         self._group_job = self.after(GROUP_CYCLE_MS, self._cycle_group)
@@ -1147,14 +1684,23 @@ class CountdownApp(ctk.CTk):
                               ("SECONDS", seconds)):
                 if self._last_shown.get(name) != val:
                     self._last_shown[name] = val
-                    self.unit_labels[name].configure(text=str(val))
+                    text = str(val) if name == "WEEKS" else f"{val:02d}"
+                    if PIL_AVAILABLE:
+                        # Draw it as a seven-segment "LED" picture. Only
+                        # SECONDS gets the soft glow — it's the one digit
+                        # that's always actively ticking.
+                        img = self._number_image(
+                            text, DIGIT_W, DIGIT_H, glow=(name == "SECONDS"))
+                        self.unit_labels[name].configure(image=img, text="")
+                    else:
+                        self.unit_labels[name].configure(text=text)
 
             day_count = total_seconds // 86400
             if self._last_shown.get("day_count") != day_count:
                 self._last_shown["day_count"] = day_count
                 self.status_label.configure(
                     text=f"{day_count} total days remaining",
-                    text_color=FG_DIM, font=self._font_status)
+                    text_color=self.FG_DIM, font=self._font_status)
 
         # Even when hidden, we still check whether it's time for an alert.
         self._check_milestones(remaining)

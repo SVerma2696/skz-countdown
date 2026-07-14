@@ -5,11 +5,12 @@ A desktop countdown app for the Stray Kids *"This & That"* album release:
 timezone and converts the release moment automatically — a STAY in Seoul,
 New York, or London all see the correct countdown for *their* clock.
 
-A clean white, black, and red look (Stray Kids' own red) with the group's
-icon and the album's title art built into the header. It also spotlights the
-8 members one at a time, shows the album tracklist, and has one-click buttons
-to the album on Spotify, Apple Music, and the Stray Kids shop — plus a
-"View on GitHub" button back to this page.
+A black/white/red "engineering console" look, built around seven-segment
+LED-style countdown digits (with a soft glow on the ticking seconds), a
+typed boot-up line in the status bar, and a switchable **light/dark mode**.
+All 8 members get their own card — click one to read a short bio — and the
+album tracklist and one-click buttons to Spotify, Apple Music, and the Stray
+Kids shop are all here too, plus a "View on GitHub" button back to this page.
 
 Runs on **Windows, macOS, and Linux** (Python + CustomTkinter).
 
@@ -106,6 +107,13 @@ single-OS project could:
 - **Missing assets should degrade, not crash.** Member and group photos are
   optional — if a file isn't there, the app draws a clean placeholder in its
   place, so it always looks finished and never errors over a missing picture.
+- **"Pixels" aren't always pixels.** Windows' display scaling (125%/150%
+  "make everything bigger") silently stretches every size you ask a widget
+  for, so a crisp small picture can come out blurry, and a window sized to a
+  fixed pixel guess can end up too narrow and clip content. The fix for both:
+  draw pictures bigger than needed and shrink them down ourselves with a
+  sharp filter, and size the window from what the content actually asks for
+  *after* drawing it, instead of guessing a constant.
 - **CI/CD removes the "works on my machine" packaging problem.** PyInstaller
   can only build for the OS it runs on; a GitHub Actions matrix builds all
   three targets on every version tag and publishes them to Releases
@@ -114,24 +122,39 @@ single-OS project could:
 
 ## Features
 
-- Live countdown (weeks, days, hours, minutes, seconds), updates every second
+- Live countdown (weeks, days, hours, minutes, seconds), updates every second,
+  drawn as blocky **seven-segment "LED" digits** with a soft red glow behind
+  the ticking seconds — the one digit that's always actively counting.
 - **Timezone-aware:** anchored to 1:00 PM KST and converted to your system's
   local timezone, DST included. Your local release time is shown in the header.
-- **8-member spotlight:** a row of 8 columns, one per member, that lights up
-  one at a time on a cycle. Group photos get their own rotating showcase, and
-  the album **tracklist** is shown too. (Member/group images are placeholders
+- **Light or dark mode:** a switch in Settings flips the whole app between a
+  crisp white console and a near-black one — red stays the one accent color
+  either way. Your choice is remembered between launches.
+- **A typed "boot sequence"** in the status bar on launch (`> booting
+  skz-countdown v1.3.0... tz-sync OK... target: 2026-08-07T13:00+09:00
+  [LOCKED]`), finishing with a softly blinking cursor.
+- **8 members, click one to learn more:** every member's card is always lit
+  up; hovering one highlights it in red and flips its tag to a little status
+  readout, and clicking opens a pop-up with their photo and a short bio. If
+  you drop in more than one photo for a member (or the group), the app
+  shuffles between them over time — never the same picture twice in a row.
+  The album **tracklist** is shown too. (Member/group images are placeholders
   you can swap for real ones — see [Adding your own images](#-adding-your-own-images).)
 - **One-click album links** to the [Stray Kids Shop](https://straykidsshop.com/collections/this-that),
   [Apple Music](https://music.apple.com/us/album/this-that/6781751949), and
   [Spotify](https://open.spotify.com/album/46TYlDjLrEsOLFgxfxNiUy), plus a
   **"View on GitHub"** button back to this repo.
-- **Clean "engineering console" look:** white/black/red, monospace digital
-  readouts, `// SECTION` headers, and thin red circuit-trace dividers.
+- **Clean "engineering console" look:** `// SECTION` headers, thin red
+  circuit-trace dividers, a faint circuit-board texture behind the countdown,
+  and a strict rule that red only ever marks the one active/important thing
+  (the ticking seconds, a hovered member, the primary button) — never just
+  decoration.
 - **Full-screen friendly:** the whole page scrolls and stays centered in a
-  comfy column whether the window is small or maximized.
+  comfy column whether the window is small or maximized, and the window sizes
+  itself to whatever your display's scaling actually needs so nothing clips.
 - **Settings live in a pop-up window** (the ⚙ button), so the main view stays
-  clean: master notification switch, per-milestone checkboxes, start-at-login,
-  and a test-notification button.
+  clean: dark mode switch, master STAY-alert switch, per-milestone checkboxes,
+  start-at-login, and a test-notification button.
 - **Keeps running when you close it:**
   - Windows / Linux → minimizes to the system tray; right-click to reopen/quit
   - macOS → keeps running in the Dock; click the Dock icon to reopen
@@ -156,9 +179,14 @@ that's missing (it never crashes over a missing file):
 
 - `assets/members/` — one portrait per member: `1_bang_chan.png`,
   `2_lee_know.png`, `3_changbin.png`, `4_hyunjin.png`, `5_han.png`,
-  `6_felix.png`, `7_seungmin.png`, `8_in.png`
+  `6_felix.png`, `7_seungmin.png`, `8_in.png`. Want to shuffle through
+  *several* photos for one member instead? Make a folder with that same name
+  (no extension) and number the photos inside it — e.g.
+  `assets/members/1_bang_chan/1.png`, `2.png`, `3.png`. With 2+ photos in a
+  folder, the app shuffles between them every few seconds, never repeating
+  the same one twice in a row; the folder takes priority over the flat file.
 - `assets/group/` — group photos named `1.png`, `2.png`, `3.png`, … (the app
-  cycles through however many it finds)
+  shuffles randomly through however many it finds, no immediate repeats)
 - `assets/logos/` — *optional* official brand logos `spotify.png`,
   `apple_music.png`, `store.png`, `github.png` (replaces the simple lettered
   placeholders). These are third-party trademarks, so they're **not** bundled.
@@ -213,8 +241,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.2.0
-git push origin v1.2.0
+git tag v1.3.0
+git push origin v1.3.0
 ```
 
 GitHub spins up Windows, macOS, and Linux runners, builds each binary with
