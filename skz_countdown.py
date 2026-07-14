@@ -47,7 +47,7 @@ except ImportError:
 # the logos, the member photos, the tracklist, the tray icon, the seven-
 # segment countdown digits, and the faint circuit-board background.
 try:
-    from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageTk
+    from PIL import Image, ImageDraw, ImageFont, ImageTk
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -72,7 +72,7 @@ if not IS_MACOS and PIL_AVAILABLE:
 # ---------------- The important facts about the album ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.3.1"
 APP_ID = "skz-countdown"
 ALBUM_NAME = 'Stray Kids — "This & That"'
 REPO_URL = "https://github.com/SVerma2696/skz-countdown"  # our home on GitHub
@@ -204,7 +204,10 @@ THEMES = {
         FG_STRONG="#141416",     # near-black for text that should pop
         CHIP_DARK="#141416",     # dark "chip" buttons (GitHub / Quit)
         CHIP_TEXT="#FFFFFF",     # their text/outline
-        SEG_OFF="#E7E7EA",       # an "unlit" LED segment, barely visible
+        # An "unlit" LED segment — a faint tint of the SAME red as the lit
+        # segments (not a mismatched gray), just like a real LED display
+        # shows the rest of the "8" shape as a dim version of its own color.
+        SEG_OFF="#F7DEE1",
     ),
     "dark": dict(
         BG_MAIN="#0D0D0F",       # near-black window background
@@ -215,7 +218,7 @@ THEMES = {
         FG_STRONG="#FFFFFF",     # bright white for text that should pop
         CHIP_DARK="#F2F2F2",     # light "chip" buttons (inverted, for contrast)
         CHIP_TEXT="#141416",     # their text/outline
-        SEG_OFF="#242428",       # an "unlit" LED segment, barely visible
+        SEG_OFF="#3A171C",       # a dim red tint, this time on a dark card
     ),
 }
 
@@ -573,52 +576,75 @@ _SEG_SUPERSAMPLE = 4
 
 # How big one digit is on screen. Bigger than a plain font would need,
 # since a blocky LED digit needs some size to actually read clearly.
-DIGIT_W = 46
-DIGIT_H = 78
+DIGIT_W = 78
+DIGIT_H = 134
 
 
-def _seven_segment_digit(digit, w, h, lit_color, off_color, glow):
-    """Draw one digit as a blocky, seven-segment "LED" glyph.
+def _segment_bar(orientation, x0, y0, x1, y1, t):
+    """One LED "bar": a hexagon with pointed ends, not a plain rectangle —
+    this is the classic seven-segment-display shape (see any real digital
+    clock), and it's what lets neighboring bars meet at a corner cleanly
+    instead of their square corners visibly overlapping each other.
 
-    Segments that are OFF are still drawn, just very faintly (like a real
-    LED display when a bar isn't powered) — so a "1" reads as a "1" next to
-    a ghost of the rest of the "8" shape, the way a real digital clock looks.
-    When glow=True, a soft blurred copy of the LIT bars sits behind the
-    crisp digit, like the bar is really glowing.
+    orientation "h": the bar runs from (x0,y0) to (x1,y0) — y1 is unused.
+    orientation "v": the bar runs from (x0,y0) to (x0,y1) — x1 is unused.
+    t is the bar's full thickness.
     """
-    t = max(4, int(w * 0.18))   # how thick each bar is
-    mid = h // 2
-    # The 7 bars, as simple rounded-rectangle boxes.
-    bars = {
-        "a": (t, 0, w - t, t),
-        "g": (t, mid - t // 2, w - t, mid + t // 2),
-        "d": (t, h - t, w - t, h),
-        "f": (0, t, t, mid),
-        "b": (w - t, t, w, mid),
-        "e": (0, mid, t, h - t),
-        "c": (w - t, mid, w, h - t),
+    ht = t / 2
+    if orientation == "h":
+        yc = y0
+        return [
+            (x0, yc), (x0 + ht, yc - ht), (x1 - ht, yc - ht),
+            (x1, yc), (x1 - ht, yc + ht), (x0 + ht, yc + ht),
+        ]
+    xc = x0
+    return [
+        (xc, y0), (xc + ht, y0 + ht), (xc + ht, y1 - ht),
+        (xc, y1), (xc - ht, y1 - ht), (xc - ht, y0 + ht),
+    ]
+
+
+def _seven_segment_bars(w, h):
+    """Work out the 7 bar polygons for one digit cell of size w×h — the
+    same layout every digit shares, just colored differently per digit."""
+    # Separate margins for each axis — the cell is much taller than it is
+    # wide, so a margin based on width alone would leave almost no gap
+    # above/below the digit.
+    margin_x = max(3, int(w * 0.12))
+    margin_y = max(3, int(h * 0.10))
+    left, right = margin_x, w - margin_x
+    top, bottom = margin_y, h - margin_y
+    mid = (top + bottom) / 2
+    t = max(4, int((right - left) * 0.42))   # how thick (wide) each bar is
+    notch = t * 0.22   # just enough gap that corners don't overlap
+    return {
+        "a": _segment_bar("h", left + notch, top, right - notch, 0, t),
+        "g": _segment_bar("h", left + notch, mid, right - notch, 0, t),
+        "d": _segment_bar("h", left + notch, bottom, right - notch, 0, t),
+        "f": _segment_bar("v", left, top + notch, 0, mid - notch, t),
+        "b": _segment_bar("v", right, top + notch, 0, mid - notch, t),
+        "e": _segment_bar("v", left, mid + notch, 0, bottom - notch, t),
+        "c": _segment_bar("v", right, mid + notch, 0, bottom - notch, t),
     }
+
+
+def _seven_segment_digit(digit, w, h, lit_color, off_color):
+    """Draw one digit as a classic seven-segment "LED" glyph — flat, crisp
+    bars, no blur or shadow, the same way a real LED display looks.
+
+    Segments that are OFF are still drawn — as a dim tint of the SAME red
+    as the lit ones (see SEG_OFF), the way a real LED display shows the
+    rest of the "8" shape dimly powered-down rather than gone, so a "1"
+    reads cleanly next to that ghost instead of a mismatched gray block
+    cutting into the lit strokes.
+    """
+    bars = _seven_segment_bars(w, h)
     lit_names = set(_SEVEN_SEG.get(digit, ""))
-    radius = max(2, t // 3)
 
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    for name, box in bars.items():
-        d.rounded_rectangle(box, radius=radius,
-                            fill=lit_color if name in lit_names else off_color)
-
-    if glow and lit_names:
-        # A blurry red copy of ONLY the lit bars, sitting behind the crisp
-        # digit, gives that soft "glowing LED" look real clocks have.
-        glow_img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        gd = ImageDraw.Draw(glow_img)
-        for name in lit_names:
-            gd.rounded_rectangle(bars[name], radius=radius, fill=lit_color)
-        glow_img = glow_img.filter(ImageFilter.GaussianBlur(max(3, t // 2)))
-        combined = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        combined.alpha_composite(glow_img)
-        combined.alpha_composite(img)
-        img = combined
+    for name, poly in bars.items():
+        d.polygon(poly, fill=lit_color if name in lit_names else off_color)
     return img
 
 
@@ -799,40 +825,49 @@ class CountdownApp(ctk.CTk):
 
     # ---------- The seven-segment countdown digits ----------
 
-    def _digit_glyphs(self, w, h, glow):
-        """Return the 10 digit pictures (0-9) at their real on-screen size,
-        drawing each one only once and reusing it forever after (just like
-        our other picture caches) — recomposing a whole number is then
-        just pasting a couple of these together, which is cheap enough to
-        do every tick.
+    def _digit_glyphs(self, w, h):
+        """Return the 10 digit pictures (0-9), drawing each one only once
+        and reusing it forever after (just like our other picture caches)
+        — recomposing a whole number is then just pasting a couple of
+        these together, which is cheap enough to do every tick.
 
-        SHARPNESS: we draw each glyph _SEG_SUPERSAMPLE times BIGGER than
-        needed, then shrink it down to the real size OURSELVES with
-        Image.LANCZOS (a sharp, high-quality filter). If we handed CTkImage
-        the oversized picture and let IT do the one and only shrink, it
-        uses a plainer filter that comes out noticeably softer — doing the
-        careful shrink ourselves first is what actually fixes the blur.
+        SHARPNESS: CustomTkinter secretly re-scales every picture we hand
+        it by whatever "make everything bigger" display-scaling factor
+        Windows is using (often 125%-150%) — and it does that resize with
+        a plain filter that looks noticeably soft. So instead of drawing
+        at the plain on-screen size and letting CTkImage do that resize
+        alone, we draw at the REAL final pixel size ourselves (on-screen
+        size × that scaling factor) using a sharp filter — so whatever
+        CTkImage does afterwards is a no-op, not a second blurry resize.
+        We still draw _SEG_SUPERSAMPLE times bigger than even THAT and
+        shrink down with Image.LANCZOS, for a crisp result either way.
         """
-        cache_key = ("digitset", w, h, glow, self.dark_mode)
+        scale = ctk.ScalingTracker.get_widget_scaling(self)
+        real_w, real_h = max(1, round(w * scale)), max(1, round(h * scale))
+        cache_key = ("digitset", real_w, real_h, self.dark_mode)
         if cache_key not in self._img_cache_raw:
-            big_w, big_h = w * _SEG_SUPERSAMPLE, h * _SEG_SUPERSAMPLE
+            big_w, big_h = real_w * _SEG_SUPERSAMPLE, real_h * _SEG_SUPERSAMPLE
             self._img_cache_raw[cache_key] = {
-                ch: _seven_segment_digit(ch, big_w, big_h, ACCENT,
-                                         self.SEG_OFF, glow)
-                    .resize((w, h), Image.LANCZOS)
+                ch: _seven_segment_digit(ch, big_w, big_h, ACCENT, self.SEG_OFF)
+                    .resize((real_w, real_h), Image.LANCZOS)
                 for ch in "0123456789"
             }
         return self._img_cache_raw[cache_key]
 
-    def _number_image(self, text, w, h, glow=False, gap=6):
+    def _number_image(self, text, w, h, gap=6):
         """Turn a short string of digits into one seven-segment picture."""
-        glyphs = self._digit_glyphs(w, h, glow)
-        total_w = len(text) * w + (len(text) - 1) * gap
-        canvas = Image.new("RGBA", (total_w, h), (0, 0, 0, 0))
+        glyphs = self._digit_glyphs(w, h)
+        scale = ctk.ScalingTracker.get_widget_scaling(self)
+        real_w = max(1, round(w * scale))
+        real_h = max(1, round(h * scale))
+        real_gap = max(1, round(gap * scale))
+        total_real_w = len(text) * real_w + (len(text) - 1) * real_gap
+        canvas = Image.new("RGBA", (total_real_w, real_h), (0, 0, 0, 0))
         x = 0
         for ch in text:
             canvas.alpha_composite(glyphs.get(ch, glyphs["0"]), (x, 0))
-            x += w + gap
+            x += real_w + real_gap
+        total_w = len(text) * w + (len(text) - 1) * gap   # logical size
         return ctk.CTkImage(light_image=canvas, dark_image=canvas,
                             size=(total_w, h))
 
@@ -1168,10 +1203,10 @@ class CountdownApp(ctk.CTk):
     def _build_countdown(self, parent, row):
         """The five big number boxes: weeks, days, hours, minutes, seconds.
 
-        The numbers themselves are drawn as seven-segment "LED" digits —
-        see _seven_segment_digit(). Only the SECONDS box gets a red
-        outline and a soft glow: it's the one thing that's always actively
-        ticking, so it's the one box red is allowed to decorate.
+        The numbers themselves are drawn as flat, crisp seven-segment "LED"
+        digits — see _seven_segment_digit(). Only the SECONDS box gets a
+        red outline: it's the one thing that's always actively ticking, so
+        it's the one box red is allowed to decorate.
         """
         wrap = ctk.CTkFrame(parent, fg_color="transparent")
         wrap.grid(row=row, column=0, sticky="ew", pady=(16, 6))
@@ -1185,16 +1220,16 @@ class CountdownApp(ctk.CTk):
                                   "SECONDS"]):
             is_seconds = name == "SECONDS"
             border = ACCENT if is_seconds else self.CARD_BORDER
-            card = ctk.CTkFrame(units, corner_radius=10, fg_color=self.BG_CARD,
-                                border_width=1, border_color=border, width=168)
-            card.grid(row=0, column=i, padx=6, sticky="nsew")
+            card = ctk.CTkFrame(units, corner_radius=14, fg_color=self.BG_CARD,
+                                border_width=1, border_color=border, width=260)
+            card.grid(row=0, column=i, padx=8, sticky="nsew")
             card.grid_propagate(False)
-            card.configure(height=148)
+            card.configure(height=270)
             value = ctk.CTkLabel(card, text="--", font=self._font_num,
                                  text_color=self.FG_STRONG)
-            value.pack(pady=(24, 0))
+            value.pack(pady=(46, 0))
             ctk.CTkLabel(card, text=name, font=self._font_unit,
-                         text_color=self.FG_DIM).pack(pady=(2, 14))
+                         text_color=self.FG_DIM).pack(pady=(12, 20))
             self.unit_labels[name] = value
 
         self.status_label = ctk.CTkLabel(
@@ -1686,11 +1721,8 @@ class CountdownApp(ctk.CTk):
                     self._last_shown[name] = val
                     text = str(val) if name == "WEEKS" else f"{val:02d}"
                     if PIL_AVAILABLE:
-                        # Draw it as a seven-segment "LED" picture. Only
-                        # SECONDS gets the soft glow — it's the one digit
-                        # that's always actively ticking.
-                        img = self._number_image(
-                            text, DIGIT_W, DIGIT_H, glow=(name == "SECONDS"))
+                        # Draw it as a flat, crisp seven-segment "LED" picture.
+                        img = self._number_image(text, DIGIT_W, DIGIT_H)
                         self.unit_labels[name].configure(image=img, text="")
                     else:
                         self.unit_labels[name].configure(text=text)
