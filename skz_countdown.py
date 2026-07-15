@@ -26,6 +26,7 @@ import json          # lets us save settings as a little text file
 import os            # lets us talk to folders and files
 import random        # lets us shuffle photos so they don't repeat in a row
 import shlex         # helps write safe commands for Linux
+import socket        # lets us check "is the app already open?"
 import subprocess    # lets us run other programs (like notifications)
 import sys           # tells us which operating system we're on
 import threading     # lets us do two things at once
@@ -47,7 +48,7 @@ except ImportError:
 # the logos, the member photos, the tracklist, the tray icon, the seven-
 # segment countdown digits, and the faint circuit-board background.
 try:
-    from PIL import Image, ImageDraw, ImageFont, ImageTk
+    from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageTk
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -72,7 +73,7 @@ if not IS_MACOS and PIL_AVAILABLE:
 # ---------------- The important facts about the album ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.0"
 APP_ID = "skz-countdown"
 ALBUM_NAME = 'Stray Kids — "This & That"'
 REPO_URL = "https://github.com/SVerma2696/skz-countdown"  # our home on GitHub
@@ -104,6 +105,21 @@ MEMBERS = [
     ("Seungmin", "7_seungmin.png"),
     ("I.N", "8_in.png"),
 ]
+
+# The short nickname each member's real photos are named after, e.g.
+# assets/members/bc1.jpg, bc2.webp, bc3.jpg, ... for Bang Chan. The app
+# tries 1, 2, 3, ... of these until a number is missing, so you can add as
+# many (or as few) photos per member as you like.
+MEMBER_PHOTO_PREFIX = {
+    "Bang Chan": "bc",
+    "Lee Know": "lk",
+    "Changbin": "cb",
+    "Hyunjin": "hj",
+    "Han": "h",
+    "Felix": "f",
+    "Seungmin": "s",
+    "I.N": "in",
+}
 
 # A short, friendly blurb for each member — shown in their pop-up window
 # when you click their card.
@@ -149,13 +165,13 @@ MEMBER_DESCRIPTIONS = {
 ALBUM_LINKS = [
     ("Stray Kids Shop",
      "https://straykidsshop.com/collections/this-that",
-     "#141416", "store.png"),
+     "#141416", "skzshoplogo.webp"),
     ("Apple Music",
      "https://music.apple.com/us/album/this-that/6781751949",
-     "#FA243C", "apple_music.png"),
+     "#FA243C", "applemusic-logo.webp"),
     ("Spotify",
      "https://open.spotify.com/album/46TYlDjLrEsOLFgxfxNiUy",
-     "#1DB954", "spotify.png"),
+     "#1DB954", "spotify-logo.png"),
 ]
 
 # Where should we keep our little settings file?
@@ -230,8 +246,13 @@ MONO_FONT = "Consolas" if IS_WINDOWS else "Menlo" if IS_MACOS else "monospace"
 TICK_VISIBLE_MS = 1000    # window open: every 1 second (so seconds tick)
 TICK_HIDDEN_MS = 15000    # window hidden: every 15 seconds (saves work,
                           # because nobody can see the seconds anyway)
-MEMBER_CYCLE_MS = 3500    # give a member a fresh photo every 3.5 seconds
-GROUP_CYCLE_MS = 6000     # swap the group photo every 6 seconds
+# Photos stay put for a while, then change at a random moment — not on a
+# steady beat — so it feels more like someone occasionally flipping to a
+# new picture than a metronome ticking.
+MEMBER_CYCLE_MIN_MS = 7000     # wait at LEAST 7 seconds...
+MEMBER_CYCLE_MAX_MS = 16000    # ...and at MOST 16 seconds before changing
+GROUP_CYCLE_MIN_MS = 10000     # the group photo waits a little longer...
+GROUP_CYCLE_MAX_MS = 22000     # ...somewhere between 10 and 22 seconds
 BOOT_TYPE_MS = 18         # how fast the boot line "types" itself out
 BOOT_BLINK_MS = 600       # how often the boot cursor blinks after that
 
@@ -245,6 +266,22 @@ def resource_path(filename):
     """
     base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, filename)
+
+
+# The picture file types we know how to open, checked in this order.
+_PHOTO_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+
+
+def _find_numbered_photo(folder, prefix, number):
+    """Look for one numbered photo (like "bc1" or plain "1"), trying every
+    picture format we support, and return its full path — or None if it
+    isn't there in any of them. This is how members and the group can mix
+    and match .jpg, .png, and .webp photos without the app caring."""
+    for ext in _PHOTO_EXTENSIONS:
+        candidate = os.path.join(folder, f"{prefix}{number}{ext}")
+        if os.path.exists(candidate):
+            return candidate
+    return None
 
 
 # ---------------- Saving and loading settings ----------------
@@ -803,11 +840,21 @@ class CountdownApp(ctk.CTk):
         try:
             if path and os.path.exists(path):
                 pic = Image.open(path)           # a real photo exists — use it!
-                if pic.mode not in ("RGB", "RGBA"):
+                if pic.mode != "RGBA":
                     pic = pic.convert("RGBA")
-                # SHARPNESS: shrink with a high-quality filter ourselves.
-                # Image.LANCZOS keeps real photos crisp instead of blurry.
-                pic = pic.resize(size, Image.LANCZOS)
+                # SHOW THE WHOLE PICTURE: shrink it to fit inside the box
+                # while keeping its own shape — never stretched, never
+                # cropped. Image.LANCZOS keeps it crisp instead of blurry.
+                fitted = ImageOps.contain(pic, size, Image.LANCZOS)
+                # The box has to stay an exact size (so cards line up), so
+                # we sit the fitted picture in the middle of a see-through
+                # canvas that size — any leftover strip just shows the
+                # card's own background peeking through, like a frame.
+                canvas = Image.new("RGBA", size, (0, 0, 0, 0))
+                offset = ((size[0] - fitted.width) // 2,
+                          (size[1] - fitted.height) // 2)
+                canvas.paste(fitted, offset, fitted)
+                pic = canvas
         except Exception:
             pic = None
         if pic is None:                          # no photo? draw a placeholder
@@ -906,33 +953,31 @@ class CountdownApp(ctk.CTk):
         bg_label.place(relx=0.5, rely=0, anchor="n")
         bg_label.lower()   # keep it BEHIND the real content in the frame
 
-    def _find_member_photos(self, file_name):
+    def _find_member_photos(self, name, file_name):
         """Find every real photo we have for one member.
 
-        Looks for a FOLDER of numbered photos first (e.g.
-        assets/members/1_bang_chan/1.png, 2.png, ...) so we can cycle
-        through several; if there's no folder, falls back to the single
-        flat file (e.g. assets/members/1_bang_chan.png); if neither
-        exists, returns an empty list and the app draws a placeholder.
+        Looks for files named like bc1.jpg, bc2.webp, bc3.jpg, ... (the
+        member's short nickname from MEMBER_PHOTO_PREFIX, then 1, 2, 3,
+        ...) directly inside assets/members/, trying every picture format
+        we support for each number. Keeps counting until a number is
+        missing. If none are found at all, falls back to the single flat
+        file named after the member (e.g. assets/members/1_bang_chan.png);
+        if that's missing too, returns an empty list and the app draws a
+        placeholder instead.
         """
-        base = os.path.splitext(file_name)[0]
-        folder = resource_path(os.path.join("assets", "members", base))
+        folder = resource_path(os.path.join("assets", "members"))
+        prefix = MEMBER_PHOTO_PREFIX.get(name)
         paths = []
-        if os.path.isdir(folder):
+        if prefix:
             i = 1
             while True:
-                found = None
-                for ext in (".png", ".jpg", ".jpeg"):
-                    candidate = os.path.join(folder, f"{i}{ext}")
-                    if os.path.exists(candidate):
-                        found = candidate
-                        break
+                found = _find_numbered_photo(folder, prefix, i)
                 if not found:
                     break
                 paths.append(found)
                 i += 1
         if not paths:
-            flat = resource_path(os.path.join("assets", "members", file_name))
+            flat = os.path.join(folder, file_name)
             if os.path.exists(flat):
                 paths.append(flat)
         return paths
@@ -950,7 +995,8 @@ class CountdownApp(ctk.CTk):
 
     def _group_photo(self, index, size):
         """Get a group photo by number (or its placeholder)."""
-        path = resource_path(os.path.join("assets", "group", f"{index}.png"))
+        folder = resource_path(os.path.join("assets", "group"))
+        path = _find_numbered_photo(folder, "", index)
         return self._get_image(path, size, "group", index)
 
     def _logo_image(self, file_name, label, color, size):
@@ -963,14 +1009,11 @@ class CountdownApp(ctk.CTk):
         placeholder always shows.)"""
         folder = resource_path(os.path.join("assets", "group"))
         count = 0
-        try:
-            for i in range(1, 21):   # check 1.png ... 20.png
-                if os.path.exists(os.path.join(folder, f"{i}.png")):
-                    count += 1
-                else:
-                    break
-        except Exception:
-            pass
+        for i in range(1, 21):   # check 1.* ... 20.*
+            if _find_numbered_photo(folder, "", i):
+                count += 1
+            else:
+                break
         return max(count, 1)
 
     def _load_logos(self):
@@ -1281,7 +1324,7 @@ class CountdownApp(ctk.CTk):
         # Work out (once) which real photos each member has, so we know
         # what to shuffle through later.
         self._member_photo_paths = [
-            self._find_member_photos(file_name) for _name, file_name in MEMBERS
+            self._find_member_photos(name, file_name) for name, file_name in MEMBERS
         ]
         self._member_current = [0] * len(MEMBERS)   # which photo is showing now
         self._member_thumb_size = (94, 126)
@@ -1402,7 +1445,7 @@ class CountdownApp(ctk.CTk):
         ).grid(row=0, column=0, padx=6)
 
         # The GitHub button — with a logo (or a lettered placeholder).
-        gh_logo = self._logo_image("github.png", "GitHub", self.CHIP_DARK, (20, 20))
+        gh_logo = self._logo_image("github-logo.webp", "GitHub", self.CHIP_DARK, (20, 20))
         ctk.CTkButton(
             btns, text="  GitHub ↗", image=gh_logo, compound="left",
             fg_color=self.CHIP_DARK, hover_color=ACCENT_HOVER, border_width=1,
@@ -1653,7 +1696,12 @@ class CountdownApp(ctk.CTk):
         """Give any member with more than one photo a fresh random one —
         shuffled so the same picture never shows twice in a row. Members
         with only one photo (or none yet) just stay put. Borders always
-        stay lit; only the picture inside ever changes."""
+        stay lit; only the picture inside ever changes.
+
+        The WAIT before the next change is random too (see
+        MEMBER_CYCLE_MIN_MS/MAX_MS), so photos change at random moments
+        instead of on a predictable beat, and stick around a good while.
+        """
         if not self.member_cards:
             return
         if self.state() != "withdrawn":   # don't bother while hidden
@@ -1667,20 +1715,26 @@ class CountdownApp(ctk.CTk):
                 photo = self._member_photo(
                     i, self._member_current[i], self._member_thumb_size)
                 self.member_photo_labels[i].configure(image=photo)
-        self._member_job = self.after(MEMBER_CYCLE_MS, self._cycle_members)
+        next_wait = random.randint(MEMBER_CYCLE_MIN_MS, MEMBER_CYCLE_MAX_MS)
+        self._member_job = self.after(next_wait, self._cycle_members)
 
     def _cycle_group(self):
-        """Swap to a fresh random group photo every few seconds — shuffled
-        so the same picture never shows twice in a row. Only bothers if
-        there's more than one, and only while the window is visible. The
-        frame around it always stays lit up."""
+        """Swap to a fresh random group photo — shuffled so the same
+        picture never shows twice in a row. Only bothers if there's more
+        than one, and only while the window is visible. The frame around
+        it always stays lit up.
+
+        Like the members above, the wait before the next swap is random
+        (see GROUP_CYCLE_MIN_MS/MAX_MS) instead of a fixed beat.
+        """
         total = self._count_group_photos()
         if total > 1 and self.state() != "withdrawn":
             choices = [i for i in range(1, total + 1) if i != self._group_index]
             self._group_index = random.choice(choices)
             self.group_label.configure(
                 image=self._group_photo(self._group_index, self._group_size))
-        self._group_job = self.after(GROUP_CYCLE_MS, self._cycle_group)
+        next_wait = random.randint(GROUP_CYCLE_MIN_MS, GROUP_CYCLE_MAX_MS)
+        self._group_job = self.after(next_wait, self._cycle_group)
 
     # ---------- The heartbeat: the tick ----------
 
@@ -1796,8 +1850,74 @@ class CountdownApp(ctk.CTk):
             save_settings(self.settings)
 
 
+# ---------------- Making sure only ONE copy of the app runs ----------------
+# A little made-up phone number on your own computer (never leaves it) that
+# only one copy of the app can "answer." Whoever answers first is the ONE
+# real copy; anyone else just leaves a quick message and steps aside.
+_SINGLE_INSTANCE_PORT = 47623
+
+
+def _become_the_one_running_copy(on_relaunch_attempt):
+    """Try to become the one and only copy of this app that's running.
+
+    If we succeed, we return a "claim" (keep it around for as long as the
+    app runs!) and everything continues as normal.
+
+    If someone else already claimed it, we tap THAT copy on the shoulder
+    (by calling on_relaunch_attempt over on its side, so it can pop its
+    window back to the front) and return None — which tells us to stop
+    immediately, so a second window never opens.
+    """
+    claim = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        claim.bind(("127.0.0.1", _SINGLE_INSTANCE_PORT))
+    except OSError:
+        claim.close()
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tap:
+                tap.settimeout(1)
+                tap.connect(("127.0.0.1", _SINGLE_INSTANCE_PORT))
+                tap.sendall(b"SHOW\n")
+        except OSError:
+            pass  # couldn't reach it — nothing more we can do
+        return None
+
+    claim.listen(5)
+
+    def _listen_forever():
+        """Sit and wait for a LATER copy of the app to tap us on the
+        shoulder, asking us to come back to the front."""
+        while True:
+            try:
+                conn, _addr = claim.accept()
+            except OSError:
+                return  # our claim got closed — time to stop listening
+            with conn:
+                try:
+                    conn.recv(64)
+                except OSError:
+                    pass
+            on_relaunch_attempt()
+
+    threading.Thread(target=_listen_forever, daemon=True).start()
+    return claim
+
+
 def main():
     """Make the window and hand control over to it. The end!"""
+    app = None
+
+    def _on_relaunch_attempt():
+        # Runs on a background thread, so hop over to the window's own
+        # thread before touching it (the same trick the tray icon uses).
+        if app is not None:
+            app.after(0, app._show_window)
+
+    single_instance_claim = _become_the_one_running_copy(_on_relaunch_attempt)
+    if single_instance_claim is None:
+        return   # another copy is already running — we tapped it on the
+                 # shoulder above, so we just quietly stop here
+
     app = CountdownApp()
     app.mainloop()   # this line runs until the app quits
 

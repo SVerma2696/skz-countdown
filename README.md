@@ -135,15 +135,23 @@ single-OS project could:
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
-  readout, and clicking opens a pop-up with their photo and a short bio. If
-  you drop in more than one photo for a member (or the group), the app
-  shuffles between them over time — never the same picture twice in a row.
-  The album **tracklist** is shown too. (Member/group images are placeholders
-  you can swap for real ones — see [Adding your own images](#-adding-your-own-images).)
+  readout, and clicking opens a pop-up with their photo and a short bio. Drop
+  in more than one photo for a member (or the group) and the app shuffles
+  between them at a random moment, waiting a good while between changes —
+  never the same picture twice in a row, and never on a predictable beat. The
+  album **tracklist** is shown too. See
+  [Adding your own images](#-adding-your-own-images) to swap in your own.
+- **Whole photos, never cropped or stretched:** every picture (member, group,
+  or logo) is shrunk to fit its box while keeping its own shape — if its
+  proportions don't match the box exactly, you see a little breathing room on
+  the sides instead of a cut-off or distorted photo.
 - **One-click album links** to the [Stray Kids Shop](https://straykidsshop.com/collections/this-that),
   [Apple Music](https://music.apple.com/us/album/this-that/6781751949), and
   [Spotify](https://open.spotify.com/album/46TYlDjLrEsOLFgxfxNiUy), plus a
   **"View on GitHub"** button back to this repo.
+- **Only one copy runs at a time:** opening the app again while it's already
+  running (even minimized to the tray) just brings the existing window back
+  to the front instead of launching a confusing second copy.
 - **Clean "engineering console" look:** `// SECTION` headers, thin red
   circuit-trace dividers, a faint circuit-board texture behind the countdown,
   and a strict rule that red only ever marks the one active/important thing
@@ -172,27 +180,34 @@ single-OS project could:
 
 ## 🖼️ Adding your own images
 
-The app ships with tidy **placeholders** so it looks finished out of the box.
-To use real pictures, just drop files into the `assets/` folder — the app
-picks them up automatically and falls back to a placeholder for anything
-that's missing (it never crashes over a missing file):
+Drop picture files into the `assets/` folder and the app picks them up
+automatically — PNG, JPG, and WEBP all work, and you can mix formats freely.
+Anything missing just falls back to a clean placeholder (it never crashes
+over a missing file):
 
-- `assets/members/` — one portrait per member: `1_bang_chan.png`,
-  `2_lee_know.png`, `3_changbin.png`, `4_hyunjin.png`, `5_han.png`,
-  `6_felix.png`, `7_seungmin.png`, `8_in.png`. Want to shuffle through
-  *several* photos for one member instead? Make a folder with that same name
-  (no extension) and number the photos inside it — e.g.
-  `assets/members/1_bang_chan/1.png`, `2.png`, `3.png`. With 2+ photos in a
-  folder, the app shuffles between them every few seconds, never repeating
-  the same one twice in a row; the folder takes priority over the flat file.
-- `assets/group/` — group photos named `1.png`, `2.png`, `3.png`, … (the app
-  shuffles randomly through however many it finds, no immediate repeats)
-- `assets/logos/` — *optional* official brand logos `spotify.png`,
-  `apple_music.png`, `store.png`, `github.png` (replaces the simple lettered
-  placeholders). These are third-party trademarks, so they're **not** bundled.
+- `assets/members/` — name each photo with the member's short nickname, then
+  a number: `bc1.jpg`, `bc2.webp`, `bc3.jpg`, ... The app tries 1, 2, 3, ...
+  until a number is missing, so add as many (or as few) photos per member as
+  you like — with 2+, it shuffles between them at a random moment, never the
+  same one twice in a row.
 
-Each folder has a `README.txt` repeating these names. See
-[License & credits](#license) for the rules on what you can redistribute.
+  | Nickname | Member | Nickname | Member |
+  |---|---|---|---|
+  | `bc` | Bang Chan | `h` | Han |
+  | `lk` | Lee Know | `f` | Felix |
+  | `cb` | Changbin | `s` | Seungmin |
+  | `hj` | Hyunjin | `in` | I.N |
+
+- `assets/group/` — group photos named `1.jpg`, `2.png`, `3.webp`, … (shuffled
+  randomly, no immediate repeats — same idea as the members above)
+- `assets/logos/` — *optional* official brand logos: `spotify-logo.png`,
+  `applemusic-logo.webp`, `skzshoplogo.webp`, `github-logo.webp` (replaces the
+  simple lettered placeholders). These are third-party trademarks, so they're
+  **not** bundled by default.
+
+Every photo is shown in full — shrunk to fit its box if needed, but never
+stretched or cropped. Each folder has a `README.txt` repeating these names.
+See [License & credits](#license) for the rules on what you can redistribute.
 
 ## 🖼️ Image credits
 
@@ -205,12 +220,13 @@ The pictures in the app header aren't drawn by the app — they're:
   ([image source](https://i.scdn.co/image/ab67616d00001e02cad184e653ea5dea71bc7365))
 - **Tracklist image** — the official *"This & That"* tracklist reveal.
 
-The **member and group images are placeholders drawn by the app** — no real
-photos of the members are bundled with this project. The **album-link and
-GitHub buttons** use simple lettered placeholders drawn by the app, not the
-official brand logos (those are trademarks and aren't included). Any real
-photos or logos you add locally are yours to source and are covered by their
-own owners' terms, not this project's license.
+The **member photos, group photos, and app-link logos** bundled in this
+repo's `assets/` folder were added by the project's author. They're photos
+and brand marks of their respective owners (JYP Entertainment, the
+photographers, Spotify, Apple, the Stray Kids Shop, GitHub) — used here for
+a non-commercial fan project, not covered by this project's own MIT license.
+If you fork this project, swap in your own images or confirm you have the
+right to use these before distributing them further.
 
 The header credit line also appears in small text at the bottom of the app
 window itself.
@@ -335,11 +351,11 @@ The MIT license covers **this project's own code only.** It does **not** cover:
   and the two header logo images — property of **JYP Entertainment** (and the
   icon via **Icons8** / album art via **Spotify**; see
   [Image credits](#️-image-credits)).
-- Any **member photos, group photos, or official brand logos you add** to the
-  `assets/` folder. Those are owned by their respective rights holders (the
-  photographers, JYP Entertainment, Spotify, Apple, etc.). This project ships
-  only app-drawn placeholders; sourcing and using real images is your
-  responsibility and is subject to those owners' terms.
+- The **member photos, group photos, and app-link logos** in `assets/`
+  (bundled by this project's author, or added by you). Those are owned by
+  their respective rights holders (the photographers, JYP Entertainment,
+  Spotify, Apple, etc.), not by this project — using or redistributing them
+  further is subject to those owners' terms.
 
 This is a non-commercial fan project and is not affiliated with or endorsed by
 JYP Entertainment or Stray Kids.

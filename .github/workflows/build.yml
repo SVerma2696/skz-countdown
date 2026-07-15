@@ -20,8 +20,8 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -30,7 +30,7 @@ jobs:
         run: python -c "from PIL import Image; Image.open('skz-logo.png').save('skz-logo.ico', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])"
       - name: Build .exe
         run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.ico" --add-data "skz-logo.png;." --add-data "t&t-logo.png;." --add-data "tracklist.png;." --add-data "assets;assets" --collect-all customtkinter skz_countdown.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SKZ-Countdown-Windows
           path: dist/SKZ-Countdown.exe
@@ -39,8 +39,8 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies
@@ -58,7 +58,7 @@ jobs:
         run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.icns" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
       - name: Zip the .app bundle
         run: cd dist && zip -r SKZ-Countdown-macOS.zip "SKZ-Countdown.app"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SKZ-Countdown-macOS
           path: dist/SKZ-Countdown-macOS.zip
@@ -67,15 +67,15 @@ jobs:
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - name: Install dependencies
         run: pip3 install -r requirements.txt pyinstaller
       - name: Build binary
         run: pyinstaller --onefile --windowed --name "skz-countdown" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SKZ-Countdown-Linux
           path: dist/skz-countdown
@@ -90,12 +90,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           path: artifacts
           merge-multiple: true
       - name: Create release with all binaries
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             artifacts/SKZ-Countdown.exe
