@@ -191,7 +191,7 @@ over a missing file):
   you like — with 2+, it shuffles between them at a random moment, never the
   same one twice in a row.
 
-  | Nickname | Member | Nickname | Member |
+  | ID | Member | ID | Member |
   |---|---|---|---|
   | `bc` | Bang Chan | `h` | Han |
   | `lk` | Lee Know | `f` | Felix |

@@ -73,7 +73,7 @@ if not IS_MACOS and PIL_AVAILABLE:
 # ---------------- The important facts about the album ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.4.1"
 APP_ID = "skz-countdown"
 ALBUM_NAME = 'Stray Kids — "This & That"'
 REPO_URL = "https://github.com/SVerma2696/skz-countdown"  # our home on GitHub
