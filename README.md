@@ -257,8 +257,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.3.0
-git push origin v1.3.0
+git tag v1.4.2
+git push origin v1.4.2
 ```
 
 GitHub spins up Windows, macOS, and Linux runners, builds each binary with
