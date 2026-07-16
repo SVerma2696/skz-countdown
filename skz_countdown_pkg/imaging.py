@@ -137,6 +137,41 @@ def _segment_bar(orientation, x0, y0, x1, y1, t):
     ]
 
 
+def _move_toward(start, target, distance):
+    """Nudge a point a little bit along the straight line from itself
+    toward another point (but never more than halfway there, so short
+    edges don't get walked right past their middle)."""
+    sx, sy = start
+    tx, ty = target
+    dx, dy = tx - sx, ty - sy
+    length = (dx * dx + dy * dy) ** 0.5
+    if length == 0:
+        return start
+    step = min(distance / length, 0.5)
+    return (sx + dx * step, sy + dy * step)
+
+
+def _soften_corners(points, radius):
+    """Turn every sharp corner of a shape into two corners close together
+    instead of one — like snipping the tip off each pointy corner of a
+    piece of paper. A real LED segment is molded plastic, so up close its
+    corners are gently rounded, never a perfectly sharp mathematical point
+    like a shape drawn in a vector program. Once this picture gets smoothed
+    down to its small on-screen size (see SEG_SUPERSAMPLE), those tiny
+    snipped corners read as soft and rounded instead of hard and computery
+    — much closer to how a real seven-segment display actually looks.
+    """
+    count = len(points)
+    softened = []
+    for i in range(count):
+        here = points[i]
+        before = points[i - 1]
+        after = points[(i + 1) % count]
+        softened.append(_move_toward(here, before, radius))
+        softened.append(_move_toward(here, after, radius))
+    return softened
+
+
 def _seven_segment_bars(w, h):
     """Work out the 7 bar polygons for one digit cell of size w×h — the
     same layout every digit shares, just colored differently per digit."""
@@ -150,7 +185,7 @@ def _seven_segment_bars(w, h):
     mid = (top + bottom) / 2
     t = max(4, int((right - left) * 0.42))   # how thick (wide) each bar is
     notch = t * 0.22   # just enough gap that corners don't overlap
-    return {
+    bars = {
         "a": _segment_bar("h", left + notch, top, right - notch, 0, t),
         "g": _segment_bar("h", left + notch, mid, right - notch, 0, t),
         "d": _segment_bar("h", left + notch, bottom, right - notch, 0, t),
@@ -159,6 +194,11 @@ def _seven_segment_bars(w, h):
         "e": _segment_bar("v", left, mid + notch, 0, bottom - notch, t),
         "c": _segment_bar("v", right, mid + notch, 0, bottom - notch, t),
     }
+    # Round every corner a little, like a real LED segment's molded
+    # plastic — see _soften_corners() for why.
+    corner_radius = t * 0.09
+    return {name: _soften_corners(points, corner_radius)
+            for name, points in bars.items()}
 
 
 def seven_segment_digit(digit, w, h, lit_color, off_color):

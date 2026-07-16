@@ -52,7 +52,7 @@ if not IS_MACOS and PIL_AVAILABLE:
 # ---------------- The important facts about the app itself ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.1"
 APP_ID = "skz-countdown"
 
 # The picture file that's ALWAYS the same, no matter which album is loaded
