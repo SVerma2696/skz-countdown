@@ -1,0 +1,40 @@
+{
+  "_comment": "This file tells the app WHICH release to count down to. Change these values and the whole app updates - the countdown, the header text, the buttons, everything - without touching any code. If this file goes missing or gets broken, the app quietly falls back to these same 'This & That' values built into the code, so it never crashes.",
+
+  "album_name": "Stray Kids — \"This & That\"",
+  "artist_display": "STRAY KIDS",
+  "title_display": "This & That",
+  "fandom_name": "STAY",
+
+  "release_date": "2026-08-07",
+  "release_time": "13:00:00",
+  "release_timezone": "Asia/Seoul",
+  "release_tz_label": "KST",
+
+  "repo_url": "https://github.com/SVerma2696/skz-countdown",
+
+  "artist_logo": "skz-logo.png",
+  "title_logo": "t&t-logo.png",
+  "tracklist_image": "tracklist.png",
+
+  "links": [
+    {
+      "label": "Stray Kids Shop",
+      "url": "https://straykidsshop.com/collections/this-that",
+      "color": "#141416",
+      "logo": "skzshoplogo.webp"
+    },
+    {
+      "label": "Apple Music",
+      "url": "https://music.apple.com/us/album/this-that/6781751949",
+      "color": "#FA243C",
+      "logo": "applemusic-logo.webp"
+    },
+    {
+      "label": "Spotify",
+      "url": "https://open.spotify.com/album/46TYlDjLrEsOLFgxfxNiUy",
+      "color": "#1DB954",
+      "logo": "spotify-logo.png"
+    }
+  ]
+}

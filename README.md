@@ -5,6 +5,36 @@ A desktop countdown app for the Stray Kids *"This & That"* album release:
 timezone and converts the release moment automatically — a STAY in Seoul,
 New York, or London all see the correct countdown for *their* clock.
 
+That release date lives in a small [`release.json`](#-pointing-this-at-a-different-comeback)
+file, not hardcoded in the code — so the same app can count down to a
+*different* comeback just by editing one file, and once release day passes
+it doesn't dead-end: it quietly switches to a running "Day N since release"
+counter instead of freezing on a one-time "it's out!" screen.
+
+## 🆕 What's new in v1.5.0
+
+- **Fixed:** the countdown used to freeze at the last numbers (with a tiny
+  stray "0" drawn on top) the moment the album dropped, instead of
+  celebrating properly.
+- **Fixed:** toggling dark mode *after* release used to permanently blank
+  the countdown boxes to `--`.
+- The release date/time/links/tracklist are now read from `release.json` at
+  startup instead of being hardcoded, with a **post-release "Day N since
+  release" mode** so the app stays useful long after the countdown ends.
+- Dark mode now keeps the Settings window open when you toggle it, and the
+  whole-page theme swap no longer flashes the old theme's background color
+  for an instant or jumps your scroll position back to the top.
+- The group photo's frame now hugs whatever photo is actually showing
+  instead of always padding it into one fixed box.
+- If the app's single-instance check ever finds its usual port blocked by
+  something unrelated, it now falls back to a second port (and tells you)
+  instead of silently refusing to open.
+- The countdown math and milestone-alert logic were pulled out into small,
+  pure, directly-testable functions (`skz_countdown_pkg/logic.py`, covered
+  by `pytest` in `tests/`), and the whole app was split from one 1,925-line
+  file into a handful of focused ones under `skz_countdown_pkg/` — see
+  [Project layout](#-project-layout).
+
 A black/white/red "engineering console" look, built around seven-segment
 LED-style countdown digits (with a soft glow on the ticking seconds), a
 typed boot-up line in the status bar, and a switchable **light/dark mode**.
@@ -66,6 +96,27 @@ python skz_countdown.py
 | Start at login | `winreg` Run key (Windows) · LaunchAgent plist (macOS) · XDG autostart entry (Linux) |
 | Packaging | PyInstaller — standalone .exe / .app / binary, no Python required; icons (`.ico` / `.icns`) auto-generated at build time |
 | CI/CD | GitHub Actions matrix build across `windows-latest`, `macos-latest`, `ubuntu-latest`, auto-attaching binaries to Releases |
+| Tests | `pytest` — the pure countdown/milestone math lives in its own file with no GUI dependency, so it's directly unit-tested |
+
+## 🗂️ Project layout
+
+`skz_countdown.py` at the project root is just a thin "front door" — it
+imports and runs the real app, which lives in `skz_countdown_pkg/`, split
+into small files that each do one job:
+
+| File | What it's responsible for |
+|---|---|
+| `config.py` | Constants, member data, themes, loading/saving your settings, and loading `release.json` |
+| `logic.py` | The pure countdown math (no window, no widgets) — covered by `tests/test_logic.py` |
+| `notifications.py` | Sending a pop-up notification, the right way for each OS |
+| `platform_integration.py` | "Start at login" and the single-instance lock |
+| `imaging.py` | Drawing placeholder photos and the seven-segment LED digits |
+| `ui.py` | `CountdownApp` — the actual window |
+| `main.py` | Ties the above together and starts the app |
+
+This same split is why `python skz_countdown.py` and the build scripts still
+work exactly as before — PyInstaller bundles the whole package automatically,
+no build script changes needed.
 
 ## 📚 What I Learned
 
@@ -131,7 +182,7 @@ single-OS project could:
   crisp white console and a near-black one — red stays the one accent color
   either way. Your choice is remembered between launches.
 - **A typed "boot sequence"** in the status bar on launch (`> booting
-  skz-countdown v1.3.0... tz-sync OK... target: 2026-08-07T13:00+09:00
+  skz-countdown v1.5.0... tz-sync OK... target: 2026-08-07T13:00+09:00
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
@@ -176,7 +227,9 @@ single-OS project could:
 - **Start at login** on all platforms (registry / LaunchAgent / XDG autostart)
 - **Low, flat memory use:** images and fonts are cached and reused, digits
   repaint only on change, and the app idles slowly while hidden in the tray.
-- Settings persist between launches; celebration state once the album drops.
+- Settings persist between launches. Once release day passes, the app
+  celebrates once, then settles into a running "Day N since release"
+  counter instead of a dead-end screen.
 
 ## 🖼️ Adding your own images
 
@@ -208,6 +261,54 @@ over a missing file):
 Every photo is shown in full — shrunk to fit its box if needed, but never
 stretched or cropped. Each folder has a `README.txt` repeating these names.
 See [License & credits](#license) for the rules on what you can redistribute.
+
+## 🎛️ Pointing this at a different comeback
+
+[`release.json`](release.json) at the project root holds everything about
+*which* release the app counts down to — edit it and the whole app updates,
+no code changes needed:
+
+```json
+{
+  "album_name": "Stray Kids — \"This & That\"",
+  "artist_display": "STRAY KIDS",
+  "title_display": "This & That",
+  "fandom_name": "STAY",
+  "release_date": "2026-08-07",
+  "release_time": "13:00:00",
+  "release_timezone": "Asia/Seoul",
+  "release_tz_label": "KST",
+  "repo_url": "https://github.com/SVerma2696/skz-countdown",
+  "artist_logo": "skz-logo.png",
+  "title_logo": "t&t-logo.png",
+  "tracklist_image": "tracklist.png",
+  "links": [
+    { "label": "...", "url": "...", "color": "#141416", "logo": "....webp" }
+  ]
+}
+```
+
+`release_timezone` is any [IANA timezone name](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)
+(e.g. `"America/New_York"`); `release_tz_label` is just the short text shown
+next to the release time (e.g. `"KST"`, `"EST"`). If `release.json` goes
+missing or has a typo in it somewhere, the app quietly falls back to the
+built-in "This & That" defaults instead of crashing — same idea as the
+settings file.
+
+Once the release date passes, the app doesn't dead-end on a static "it's
+out!" screen — it switches to a running **"Day N since release"** counter
+underneath the album links, so it stays useful for as long as you keep it
+running.
+
+## 🧪 Running the tests
+
+The countdown math and milestone-alert logic (`skz_countdown_pkg/logic.py`)
+have no GUI dependency, so they're covered by plain `pytest` tests:
+
+```bash
+pip install pytest
+pytest
+```
 
 ## 🖼️ Image credits
 
@@ -257,8 +358,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.4.2
-git push origin v1.4.2
+git tag v1.5.0
+git push origin v1.5.0
 ```
 
 GitHub spins up Windows, macOS, and Linux runners, builds each binary with
