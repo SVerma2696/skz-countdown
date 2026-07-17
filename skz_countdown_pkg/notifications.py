@@ -45,6 +45,13 @@ $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
         ["powershell", "-NoProfile", "-NonInteractive",
          "-WindowStyle", "Hidden", "-Command", script],
         check=False, capture_output=True,
+        # Without this, Windows can still flash a black console window for
+        # a split second — "-WindowStyle Hidden" only tells POWERSHELL
+        # itself to hide, but the separate console window Windows makes to
+        # RUN powershell.exe in can still appear first. This flag tells
+        # Windows "don't make that console window at all," so nothing
+        # flashes on screen no matter how fast or slow the computer is.
+        creationflags=subprocess.CREATE_NO_WINDOW,
     )
     if result.returncode != 0:
         raise RuntimeError("PowerShell toast failed")

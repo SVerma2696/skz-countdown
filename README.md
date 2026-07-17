@@ -11,6 +11,24 @@ file, not hardcoded in the code — so the same app can count down to a
 it doesn't dead-end: it quietly switches to a running "Day N since release"
 counter instead of freezing on a one-time "it's out!" screen.
 
+## 🆕 What's new in v1.6.2
+
+- **Fixed: sending a test notification (or any Windows toast) could flash a
+  black console window** for a split second. The app asks Windows for a
+  toast by briefly running PowerShell in the background — `-WindowStyle
+  Hidden` only tells *PowerShell itself* to hide, but Windows can still
+  briefly show the separate console window it runs PowerShell inside. Added
+  `creationflags=subprocess.CREATE_NO_WINDOW`, which tells Windows not to
+  create that console window in the first place.
+- **Fixed: toggling dark mode on *or* off could still make the Settings
+  window look like it closed.** It turns out the Settings window was never
+  actually being destroyed — it survives the toggle fine — but repainting
+  the whole main window afterward could make Windows quietly slide the
+  Settings window *behind* the main one, which looks exactly like it
+  closed even though it's technically still open. The toggle now brings
+  Settings back to the front immediately after repainting, so it actually
+  looks like what it already was: still open.
+
 ## 🆕 What's new in v1.6.1
 
 - **Fixed a CI-breaking bug in v1.6.0's own test gate:** on Linux, just
@@ -249,7 +267,7 @@ single-OS project could:
   crisp white console and a near-black one — red stays the one accent color
   either way. Your choice is remembered between launches.
 - **A typed "boot sequence"** in the status bar on launch (`> booting
-  skz-countdown v1.6.1... tz-sync OK... target: 2026-08-07T13:00+09:00
+  skz-countdown v1.6.2... tz-sync OK... target: 2026-08-07T13:00+09:00
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
@@ -464,8 +482,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.6.1
-git push origin v1.6.1
+git tag v1.6.2
+git push origin v1.6.2
 ```
 
 **Tests gate every release.** Before any of the three platform builds start,

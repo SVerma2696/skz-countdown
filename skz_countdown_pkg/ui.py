@@ -146,6 +146,16 @@ class CountdownApp(ctk.CTk):
         if self.settings_win is not None and self.settings_win.winfo_exists():
             self.settings_win.configure(fg_color=self.BG_MAIN)
         self._rebuild_ui()
+        # BUG THIS FIXES: the Settings window was never actually being
+        # destroyed (it survives the rebuild just fine) — but repainting
+        # the whole main window like this can make Windows quietly slide
+        # the Settings window BEHIND the main one, which looks exactly
+        # like it closed even though it's still open the whole time.
+        # Bringing it back to the front here makes it actually LOOK like
+        # what it already technically is: still open.
+        if self.settings_win is not None and self.settings_win.winfo_exists():
+            self.settings_win.lift()
+            self.settings_win.focus_force()
 
     def _rebuild_ui(self):
         """Tear down and redraw the whole window.
