@@ -6,13 +6,18 @@ right numbers out. Run them with: pytest
 """
 
 import os
+import random
 import sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 # Let this test file find the skz_countdown_pkg package without needing the
 # app "installed" — it just adds the project's home folder to the search path.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from skz_countdown_pkg.logic import split_remaining, milestones_crossed
+from skz_countdown_pkg.logic import (
+    local_display_dt, milestones_crossed, split_remaining,
+)
 
 
 # ---------------- split_remaining ----------------
@@ -43,6 +48,30 @@ def test_split_remaining_mixed():
     # 2 weeks, 3 days, 4 hours, 5 minutes, 6 seconds, added up by hand.
     total = (2 * 7 * 24 * 3600) + (3 * 24 * 3600) + (4 * 3600) + (5 * 60) + 6
     assert split_remaining(total) == (2, 3, 4, 5, 6)
+
+
+def test_split_remaining_roundtrip_always_adds_back_up():
+    # A "property test": no matter what total we hand in, splitting it into
+    # weeks/days/hours/minutes/seconds and adding those pieces BACK together
+    # should always land exactly on the number we started with — and each
+    # piece should stay inside its own sensible range (you'd never want to
+    # see "26 hours" on the HOURS box).
+    rng = random.Random(1234)   # a fixed seed = the same "random" values
+    interesting_values = [
+        0, 1, 59, 60, 61, 3599, 3600, 3601,
+        86399, 86400, 86401, 604799, 604800, 604801,
+    ]
+    sampled_values = [rng.randint(0, 50_000_000) for _ in range(300)]
+
+    for total in interesting_values + sampled_values:
+        weeks, days, hours, minutes, seconds = split_remaining(total)
+        rebuilt = (weeks * 7 * 24 * 3600) + (days * 24 * 3600) \
+            + (hours * 3600) + (minutes * 60) + seconds
+        assert rebuilt == total
+        assert 0 <= days < 7
+        assert 0 <= hours < 24
+        assert 0 <= minutes < 60
+        assert 0 <= seconds < 60
 
 
 # ---------------- milestones_crossed ----------------
@@ -111,3 +140,45 @@ def test_release_milestone_only_at_or_past_zero():
         remaining=0, fired=set(), settings=_ALL_ON,
         milestones=_TEST_MILESTONES)
     assert "notify_release" in [key for key, _l, _s in at_release]
+
+
+# ---------------- local_display_dt (the daylight-saving fix) ----------------
+# The bug this guards against: converting a future release into "your local
+# time" using TODAY's offset instead of the offset that's actually in effect
+# ON THE RELEASE DATE. New York, for example, is UTC-4 in summer (EDT) but
+# UTC-5 in winter (EST) — reusing one of those offsets for the other season
+# silently shifts the displayed time (and sometimes the whole date) by an
+# hour. These tests use an explicit zone name (not the machine's own
+# timezone) so the result is exactly predictable no matter where the test
+# happens to run.
+
+def test_local_display_dt_summer_release_is_edt_in_new_york():
+    summer_release = datetime(2026, 8, 7, 13, 0, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    ny = local_display_dt(summer_release, "America/New_York")
+    assert ny.strftime("%Z") == "EDT"
+    assert ny.utcoffset().total_seconds() == -4 * 3600
+
+
+def test_local_display_dt_winter_release_is_est_in_new_york():
+    winter_release = datetime(2026, 12, 25, 9, 0, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+    ny = local_display_dt(winter_release, "America/New_York")
+    assert ny.strftime("%Z") == "EST"
+    assert ny.utcoffset().total_seconds() == -5 * 3600
+
+
+def test_local_display_dt_matches_direct_zoneinfo_conversion():
+    # Check every season of the year, not just one — this is the same
+    # comparison used to hand-verify the fix before writing it down here.
+    for month in (1, 4, 7, 10):
+        release = datetime(2026, month, 15, 12, 0, 0, tzinfo=ZoneInfo("Asia/Seoul"))
+        expected = release.astimezone(ZoneInfo("America/New_York"))
+        actual = local_display_dt(release, "America/New_York")
+        assert actual == expected
+
+
+def test_local_display_dt_default_uses_system_timezone():
+    # With no zone_name given, it should behave exactly like the plain
+    # astimezone() the rest of the app relies on for "my own computer's
+    # timezone" — just resolved fresh each call instead of cached once.
+    moment = datetime(2026, 6, 1, 0, 0, 0, tzinfo=ZoneInfo("UTC"))
+    assert local_display_dt(moment) == moment.astimezone()

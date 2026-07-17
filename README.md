@@ -11,6 +11,45 @@ file, not hardcoded in the code — so the same app can count down to a
 it doesn't dead-end: it quietly switches to a running "Day N since release"
 counter instead of freezing on a one-time "it's out!" screen.
 
+## 🆕 What's new in v1.6.0
+
+- **Fixed a real timezone bug:** the "Your local time" line used to work
+  out your computer's UTC offset once, using *today's* daylight-saving
+  state, then reuse that same offset for every future date — wrong for any
+  release date in a different daylight-saving season than today (e.g.
+  viewing a December release from July). It's now resolved correctly for
+  the release's *own* date every time, and recomputed on every tick so it
+  stays correct even if the app has been running for weeks and a
+  daylight-saving change happens while it's open.
+- **`release.json` is now genuinely editable by anyone who downloads the
+  app**, not just the person who built it: previously it was only ever read
+  from inside the packaged .exe/.app, a temp folder that's deleted the
+  moment the app closes — so nobody who just downloaded it could point it
+  at a different comeback. It's now looked up in order (first match wins):
+  next to the app itself → your saved-settings folder → the bundled
+  default. See [Pointing this at a different comeback](#-pointing-this-at-a-different-comeback).
+- **The tray icon is actually useful now without opening the window:**
+  hovering it shows a live "12d 4h · This & That" tooltip, and its corner
+  gets a tiny red LED-style number counting the days down — redrawn once a
+  day, free the rest of the time.
+- **The release moment is now one click, not a scroll:** the instant the
+  countdown hits zero, a big "▶ Stream now" button appears right under it
+  (there's also an opt-in "open it automatically" checkbox in Settings),
+  instead of leaving the stream link several sections down the page.
+- Packaging fix: the build scripts and CI workflow now actually bundle
+  `release.json` into the built app (`--add-data`) — it was missing before,
+  so a built .exe/.app was silently falling back to the "This & That"
+  defaults no matter what release.json said.
+- **Tests now gate every release build.** A new `test` job in
+  `.github/workflows/build.yml` runs the full `pytest` suite first; the
+  Windows, macOS, and Linux build jobs all wait on it passing. A broken
+  release can no longer be published.
+- The test suite grew from 12 to 28 tests: boundary cases for milestone
+  alerts, a round-trip property test proving the countdown split always
+  adds back up to the original total, `release.json` fallback behavior
+  (a typo'd timezone, a nonexistent date like Feb 30th, missing keys), and
+  the daylight-saving fix above.
+
 ## 🆕 What's new in v1.5.1
 
 - The seven-segment countdown digits got a shape pass to look closer to a
@@ -99,17 +138,17 @@ python skz_countdown.py
 |-------|------------|
 | Language | Python 3.12 |
 | GUI | [CustomTkinter](https://github.com/TomSchimansky/CustomTkinter) — modern themed widgets on top of Tkinter |
-| Timezone handling | `zoneinfo` (standard library) + `tzdata` — release anchored to `Asia/Seoul`, converted to the user's local timezone |
+| Timezone handling | `zoneinfo` (standard library) + `tzdata` — release anchored to whatever `release.json` says, converted to the user's local timezone *for that specific date* (correct across daylight saving, not just "today's" offset) |
 | Notifications | A real Windows 10/11 toast (via PowerShell + the WinRT notification API) on Windows; [plyer](https://github.com/kivy/plyer) with native fallbacks (`osascript` on macOS, `notify-send` on Linux) everywhere else |
-| Images | [Pillow](https://python-pillow.org/) — loads the logos, member/group photos and tracklist, draws placeholder art + the tray icon, and generates the memory-cached `CTkImage`s |
+| Images | [Pillow](https://python-pillow.org/) — loads the logos, member/group photos and tracklist, draws placeholder art + the tray icon (including a live seven-segment day-count badge), and generates the memory-cached `CTkImage`s |
 | Layout | `CTkScrollableFrame` with a centered max-width column, so it looks right from a small window up to full-screen |
 | Links | `webbrowser` (standard library) — opens the album on Spotify / Apple Music / the store, and the repo on GitHub |
-| System tray | [pystray](https://github.com/moses-palmer/pystray) + Pillow (Windows/Linux); Dock + `tk::mac::ReopenApplication` on macOS |
+| System tray | [pystray](https://github.com/moses-palmer/pystray) + Pillow (Windows/Linux); Dock + `tk::mac::ReopenApplication` on macOS. The tooltip and a tiny red LED-style day-count badge stay live even while the window is hidden |
 | Persistence | JSON settings in the OS-appropriate config directory (AppData / Application Support / `~/.config`) |
 | Start at login | `winreg` Run key (Windows) · LaunchAgent plist (macOS) · XDG autostart entry (Linux) |
 | Packaging | PyInstaller — standalone .exe / .app / binary, no Python required; icons (`.ico` / `.icns`) auto-generated at build time |
-| CI/CD | GitHub Actions matrix build across `windows-latest`, `macos-latest`, `ubuntu-latest`, auto-attaching binaries to Releases |
-| Tests | `pytest` — the pure countdown/milestone math lives in its own file with no GUI dependency, so it's directly unit-tested |
+| CI/CD | GitHub Actions matrix build across `windows-latest`, `macos-latest`, `ubuntu-latest`, auto-attaching binaries to Releases — gated behind a `pytest` job, so a failing test blocks the build |
+| Tests | `pytest`, 28 tests — the pure countdown/milestone math and the `release.json` config parsing both live in files with no GUI dependency, so they're directly unit-tested |
 
 ## 🗂️ Project layout
 
@@ -189,13 +228,16 @@ single-OS project could:
 - Live countdown (weeks, days, hours, minutes, seconds), updates every second,
   drawn as blocky **seven-segment "LED" digits** with a soft red glow behind
   the ticking seconds — the one digit that's always actively counting.
-- **Timezone-aware:** anchored to 1:00 PM KST and converted to your system's
-  local timezone, DST included. Your local release time is shown in the header.
+- **Timezone-aware:** anchored to the release moment in `release.json` and
+  converted to your system's local timezone — correctly resolved for
+  *that specific date's* daylight-saving state (not just today's), and
+  re-checked every tick so it stays right even across a long-running
+  session. Your local release time is shown in the header.
 - **Light or dark mode:** a switch in Settings flips the whole app between a
   crisp white console and a near-black one — red stays the one accent color
   either way. Your choice is remembered between launches.
 - **A typed "boot sequence"** in the status bar on launch (`> booting
-  skz-countdown v1.5.1... tz-sync OK... target: 2026-08-07T13:00+09:00
+  skz-countdown v1.6.0... tz-sync OK... target: 2026-08-07T13:00+09:00
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
@@ -226,9 +268,16 @@ single-OS project could:
   itself to whatever your display's scaling actually needs so nothing clips.
 - **Settings live in a pop-up window** (the ⚙ button), so the main view stays
   clean: dark mode switch, master STAY-alert switch, per-milestone checkboxes,
+  an opt-in "open the stream link automatically at release" checkbox,
   start-at-login, and a test-notification button.
+- **The moment it drops, a big "▶ Stream now" button appears** right under
+  the countdown — no scrolling down to find the link at the one moment you
+  actually need it.
 - **Keeps running when you close it:**
-  - Windows / Linux → minimizes to the system tray; right-click to reopen/quit
+  - Windows / Linux → minimizes to the system tray; right-click to reopen/quit.
+    The tray icon's tooltip shows a live "12d 4h · This & That" countdown, and
+    a tiny red LED-style number in its corner counts the days down — so you
+    can tell how long is left without opening the window at all.
   - macOS → keeps running in the Dock; click the Dock icon to reopen
   - A "Quit app" button fully exits on any platform
 - **Never loses time:** the countdown is always computed live from the release
@@ -308,20 +357,52 @@ missing or has a typo in it somewhere, the app quietly falls back to the
 built-in "This & That" defaults instead of crashing — same idea as the
 settings file.
 
+**This works even on a downloaded, already-built app — no rebuild needed.**
+The app looks for `release.json` in three places, in order, and uses the
+first one it finds:
+
+1. **Right next to the app itself** (the `.exe`/`.app`, or this script if
+   you're running from source) — drop your own `release.json` beside it to
+   point that exact copy at a different comeback.
+2. **Your saved-settings folder** (the same place `skz_countdown_settings.json`
+   lives) — works even if the app is installed somewhere you can't write new
+   files, like `Program Files`.
+3. **The copy bundled inside the app** — the built-in "This & That" default,
+   always there as a safety net.
+
+So a STAY could point a downloaded copy at the *next* comeback the day it's
+announced, without anyone needing to cut a new release.
+
 Once the release date passes, the app doesn't dead-end on a static "it's
 out!" screen — it switches to a running **"Day N since release"** counter
 underneath the album links, so it stays useful for as long as you keep it
-running.
+running. And the exact moment it *does* drop, a big **"▶ Stream now"**
+button appears right under the countdown (there's also an opt-in "open it
+automatically" checkbox in Settings) — so the payoff is one click, not a
+scroll down the page.
+
+The tray icon also stays useful without opening the window at all: hover it
+for a "12d 4h · This & That" tooltip, and its corner shows a tiny red
+LED-style number counting the days down.
 
 ## 🧪 Running the tests
 
-The countdown math and milestone-alert logic (`skz_countdown_pkg/logic.py`)
-have no GUI dependency, so they're covered by plain `pytest` tests:
+The countdown math, milestone-alert logic, timezone handling, and
+`release.json` fallback behavior (`skz_countdown_pkg/logic.py` and
+`skz_countdown_pkg/config.py`) have no GUI dependency, so they're covered by
+plain `pytest` tests — 28 of them, covering boundary cases (a milestone
+firing exactly at its mark, disabled/already-fired milestones being
+skipped), the config fallbacks (a typo'd timezone, a nonexistent date like
+Feb 30th, missing keys), and that daylight-saving time is resolved correctly
+for the specific release date, not just "today":
 
 ```bash
 pip install pytest
 pytest
 ```
+
+These same tests **gate every release build** — see
+[Automated builds](#automated-builds-github-actions) below.
 
 ## 🖼️ Image credits
 
@@ -371,9 +452,15 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.5.1
-git push origin v1.5.1
+git tag v1.6.0
+git push origin v1.6.0
 ```
+
+**Tests gate every release.** Before any of the three platform builds start,
+a `test` job runs the full `pytest` suite — the Windows, macOS, and Linux
+build jobs all `needs: [test]`, so if the countdown math or milestone logic
+is broken, GitHub simply won't build (let alone publish) any binary. A
+broken release can't ship.
 
 GitHub spins up Windows, macOS, and Linux runners, builds each binary with
 PyInstaller, and publishes a Release with all three attached

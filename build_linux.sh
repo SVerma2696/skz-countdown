@@ -9,12 +9,14 @@ set -e   # If any step fails, stop right away (don't keep going blindly)
 pip3 install -r requirements.txt pyinstaller
 
 # Step 2: Squish everything into one runnable file.
-#   --add-data = pack the logos, tracklist, and assets folder inside the binary
+#   --add-data = pack the logos, tracklist, release.json (which comeback to
+#                count down to), and assets folder inside the binary
 #                (on Mac/Linux the two sides of --add-data are split by ":")
 pyinstaller --onefile --windowed --name "skz-countdown" \
   --add-data "skz-logo.png:." \
   --add-data "t&t-logo.png:." \
   --add-data "tracklist.png:." \
+  --add-data "release.json:." \
   --add-data "assets:assets" \
   --collect-all customtkinter skz_countdown.py
 

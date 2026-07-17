@@ -52,7 +52,7 @@ if not IS_MACOS and PIL_AVAILABLE:
 # ---------------- The important facts about the app itself ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.5.1"
+APP_VERSION = "1.6.0"
 APP_ID = "skz-countdown"
 
 # The picture file that's ALWAYS the same, no matter which album is loaded
@@ -304,16 +304,52 @@ DEFAULT_RELEASE = {
 }
 
 
+def _release_json_search_paths():
+    """Every place we'll look for release.json, in order — the FIRST one
+    that actually exists and reads correctly wins.
+
+    This matters most once the app is packaged into one .exe/.app: the
+    file bundled inside it lives in a temp folder that gets deleted the
+    moment the app closes, so nobody who just downloaded the app could
+    ever edit that copy. These three spots fix that:
+
+      1. Right next to the app itself (the .exe/.app, or this script in
+         dev) — so anyone can drop their own release.json beside it and
+         point the SAME app at a totally different comeback, with no
+         rebuild needed.
+      2. Your saved-settings folder — works even somewhere you can't
+         write new files next to the app itself (like Program Files).
+      3. The copy bundled inside the app — the safety net default that's
+         always there.
+    """
+    if getattr(sys, "frozen", False):
+        beside_the_app = os.path.join(
+            os.path.dirname(os.path.abspath(sys.executable)), "release.json")
+    else:
+        beside_the_app = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "release.json")
+    return [
+        beside_the_app,
+        os.path.join(_cfg_dir, "release.json"),
+        resource_path("release.json"),
+    ]
+
+
 def load_release_config():
-    """Read release.json. If it's missing or broken, use the defaults above
-    — same "never crash the countdown" idea as load_settings()."""
-    data = dict(DEFAULT_RELEASE)
-    try:
-        with open(resource_path("release.json"), "r", encoding="utf-8") as f:
-            data.update(json.load(f))
-    except (OSError, json.JSONDecodeError, TypeError):
-        pass  # no file, or it's broken — defaults are fine
-    return data
+    """Read release.json from the first place we find it (see
+    _release_json_search_paths). If NONE of those exist or read correctly,
+    use the defaults above — same "never crash the countdown" idea as
+    load_settings()."""
+    for path in _release_json_search_paths():
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = dict(DEFAULT_RELEASE)
+                data.update(json.load(f))
+                return data
+        except (OSError, json.JSONDecodeError, TypeError):
+            continue  # not there, or broken — try the next spot
+    return dict(DEFAULT_RELEASE)   # nothing worked — the built-in safety net
 
 
 def _release_datetime(data):
@@ -349,11 +385,6 @@ TRACKLIST_FILE = RELEASE["tracklist_image"]  # the picture of the song list
 
 # THE moment everything counts down to (a real, timezone-aware moment).
 RELEASE_DT = _release_datetime(RELEASE)
-
-# Ask the computer what time zone IT lives in,
-# then figure out what the release moment is in LOCAL time.
-LOCAL_TZ = datetime.now().astimezone().tzinfo
-RELEASE_LOCAL = RELEASE_DT.astimezone(LOCAL_TZ)
 
 # The buttons that jump to the album online.
 # Each one is (label, web address, brand color, logo file name).

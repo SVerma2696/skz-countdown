@@ -23,13 +23,15 @@ rm -rf skz.iconset
 
 # Step 3: Squish everything into one .app bundle.
 #   --icon     = the Dock/Finder icon we just made
-#   --add-data = pack the logos, tracklist, and assets folder inside the .app
+#   --add-data = pack the logos, tracklist, release.json (which comeback to
+#                count down to), and assets folder inside the .app
 #                (on Mac/Linux the two sides of --add-data are split by ":")
 pyinstaller --onefile --windowed --name "SKZ-Countdown" \
   --icon "skz-logo.icns" \
   --add-data "skz-logo.png:." \
   --add-data "t&t-logo.png:." \
   --add-data "tracklist.png:." \
+  --add-data "release.json:." \
   --add-data "assets:assets" \
   --collect-all customtkinter skz_countdown.py
 

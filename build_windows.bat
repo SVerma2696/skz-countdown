@@ -16,7 +16,8 @@ REM Step 3: Squish everything into ONE file.
 REM   --onefile   = one single .exe instead of a big messy folder
 REM   --windowed  = no scary black text window when the app opens
 REM   --icon      = use our Stray Kids picture as the .exe's own icon
-REM   --add-data  = pack the logos, the tracklist, AND the whole assets
+REM   --add-data  = pack the logos, the tracklist, release.json (which
+REM                 comeback to count down to), AND the whole assets
 REM                 folder (member/group/logo pictures) inside the .exe.
 REM                 On Windows the two sides of --add-data are split by ";"
 REM   --collect-all customtkinter = pack ALL of customtkinter's art supplies
@@ -25,6 +26,7 @@ pyinstaller --onefile --windowed --name "SKZ-Countdown" ^
   --add-data "skz-logo.png;." ^
   --add-data "t&t-logo.png;." ^
   --add-data "tracklist.png;." ^
+  --add-data "release.json;." ^
   --add-data "assets;assets" ^
   --collect-all customtkinter skz_countdown.py
 

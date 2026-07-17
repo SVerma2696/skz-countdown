@@ -18,7 +18,7 @@ from .config import (
     ACCENT, ACCENT_HOVER, ALBUM_LINKS, ALBUM_NAME, APP_NAME, APP_VERSION,
     ARTIST_DISPLAY, FANDOM_NAME, IS_MACOS, IS_WINDOWS, MEMBERS, MEMBER_DESCRIPTIONS,
     MEMBER_PHOTO_PREFIX, MILESTONES, MONO_FONT, PIL_AVAILABLE, RELEASE_DT,
-    RELEASE_LOCAL, RELEASE_TZ_LABEL, REPO_URL, SKZ_LOGO_FILE, STATUS_BAR_BG,
+    RELEASE_TZ_LABEL, REPO_URL, SKZ_LOGO_FILE, STATUS_BAR_BG,
     THEMES, TITLE_DISPLAY, TRACKLIST_FILE, TRAY_AVAILABLE, TT_LOGO_FILE,
     BOOT_BLINK_MS, BOOT_TYPE_MS, GROUP_CYCLE_MAX_MS, GROUP_CYCLE_MIN_MS,
     MEMBER_CYCLE_MAX_MS, MEMBER_CYCLE_MIN_MS, TICK_HIDDEN_MS, TICK_VISIBLE_MS,
@@ -28,7 +28,7 @@ from .imaging import (
     DIGIT_H, DIGIT_W, SEG_SUPERSAMPLE, make_group_placeholder,
     make_logo_placeholder, make_member_placeholder, seven_segment_digit,
 )
-from .logic import milestones_crossed, split_remaining
+from .logic import local_display_dt, milestones_crossed, split_remaining
 from .notifications import send_notification
 from .platform_integration import is_startup_enabled, set_startup
 
@@ -641,17 +641,45 @@ class CountdownApp(ctk.CTk):
             font=ctk.CTkFont(size=13), text_color=self.FG_DIM,
         ).pack(pady=(6, 0))
 
-        tz_name = RELEASE_LOCAL.strftime("%Z") or str(RELEASE_LOCAL.tzinfo)
-        local_str = RELEASE_LOCAL.strftime(
-            "%A, %B %d, %Y · %I:%M %p").replace(" 0", " ")
-        ctk.CTkLabel(
-            header, text=f"Your local time: {local_str} ({tz_name})",
-            font=ctk.CTkFont(size=13, weight="bold"), text_color=self.FG_STRONG,
-        ).pack(pady=(2, 0))
+        # Worked out FRESH here (not from a value saved once at startup) —
+        # see _refresh_local_time_label() for why that matters and how
+        # this label keeps itself correct while the app keeps running.
+        self.local_time_label = ctk.CTkLabel(
+            header, text="", font=ctk.CTkFont(size=13, weight="bold"),
+            text_color=self.FG_STRONG,
+        )
+        self.local_time_label.pack(pady=(2, 0))
+        self._refresh_local_time_label(force=True)
 
         # A thin red circuit-trace line under the header.
         ctk.CTkFrame(header, height=2, fg_color=ACCENT, corner_radius=0).pack(
             fill="x", padx=60, pady=(14, 0))
+
+    def _refresh_local_time_label(self, force=False):
+        """Update the "Your local time: ..." line.
+
+        BUG THIS FIXES: your computer's timezone isn't just one fixed
+        number like "-4 hours" — places with daylight saving use a
+        DIFFERENT offset in summer than in winter. The old code asked
+        "what's my offset RIGHT NOW?" once when the app started, then
+        reused that same answer for every date forever — which is wrong
+        for any release date in a different daylight-saving season than
+        today. local_display_dt() asks the correct question instead:
+        "what's the offset on THIS SPECIFIC DATE?"
+
+        We also don't just compute this once — we re-check it here, every
+        tick, so an app that's been sitting in the tray for weeks (or
+        traveled somewhere new) stays correct through a daylight-saving
+        change instead of freezing its answer at startup.
+        """
+        local_dt = local_display_dt(RELEASE_DT)
+        tz_name = local_dt.strftime("%Z") or str(local_dt.tzinfo)
+        local_str = local_dt.strftime(
+            "%A, %B %d, %Y · %I:%M %p").replace(" 0", " ")
+        text = f"Your local time: {local_str} ({tz_name})"
+        if force or self._last_shown.get("local_time_str") != text:
+            self._last_shown["local_time_str"] = text
+            self.local_time_label.configure(text=text)
 
     def _build_countdown(self, parent, row):
         """The five big number boxes: weeks, days, hours, minutes, seconds.
@@ -688,6 +716,42 @@ class CountdownApp(ctk.CTk):
         self.status_label = ctk.CTkLabel(
             wrap, text="", font=self._font_status, text_color=self.FG_DIM)
         self.status_label.grid(row=1, column=0, pady=(12, 0))
+
+        # A big, obvious "go do the thing" button — built now but kept
+        # HIDDEN (never gridded) until the album actually drops. See
+        # _tick(): the moment we switch into celebration mode, this button
+        # appears right under the countdown instead of making you scroll
+        # all the way down to "GET THE ALBUM" to act on the one moment
+        # this whole app exists for.
+        self.stream_now_btn = ctk.CTkButton(
+            wrap, text=f"▶  Stream {TITLE_DISPLAY} now", fg_color=ACCENT,
+            hover_color=ACCENT_HOVER, text_color="#FFFFFF",
+            font=ctk.CTkFont(size=16, weight="bold"), height=48,
+            corner_radius=10, command=self._open_stream_now,
+        )
+        if self._celebrating:
+            self.stream_now_btn.grid(row=2, column=0, pady=(16, 0))
+
+    def _primary_stream_link(self):
+        """Which link should the big 'Stream now' button (and the
+        auto-open-at-release setting) use? Prefer Spotify — it's what most
+        people mean by "stream" — and if a release.json doesn't happen to
+        have one, fall back to whichever link is listed first rather than
+        having no button at all. Returns (label, url), or (None, None) if
+        somehow there are no links configured at all."""
+        for label, url, _color, _logo in ALBUM_LINKS:
+            if label.strip().lower() == "spotify":
+                return label, url
+        if ALBUM_LINKS:
+            return ALBUM_LINKS[0][0], ALBUM_LINKS[0][1]
+        return None, None
+
+    def _open_stream_now(self):
+        """The big 'Stream now' button was clicked (or the auto-open-at-
+        release setting fired on its own)."""
+        _label, url = self._primary_stream_link()
+        if url:
+            self._open_url(url)
 
     def _build_album_links(self, parent, row):
         """Buttons that jump straight to the album online.
@@ -908,7 +972,7 @@ class CountdownApp(ctk.CTk):
 
         win = ctk.CTkToplevel(self)
         win.title(f"{APP_NAME} — Settings")
-        win.geometry("420x520")
+        win.geometry("420x580")
         win.configure(fg_color=self.BG_MAIN)
         win.transient(self)          # keep it attached to the main window
         self._set_window_icon(win)   # give this window our icon too
@@ -953,6 +1017,19 @@ class CountdownApp(ctk.CTk):
                 hover_color=ACCENT_HOVER, command=self._on_setting_changed,
             ).pack(anchor="w", padx=24, pady=4)
             self.milestone_vars[key] = var
+
+        ctk.CTkLabel(
+            win, text="// AT RELEASE", font=self._font_section,
+            text_color=ACCENT).pack(anchor="w", padx=20, pady=(14, 0))
+        self.auto_open_var = ctk.BooleanVar(
+            value=self.settings.get("auto_open_at_release", False))
+        stream_label, _stream_url = self._primary_stream_link()
+        ctk.CTkCheckBox(
+            win, text=f"Open {stream_label or 'the album link'} automatically "
+                      "the moment it drops",
+            variable=self.auto_open_var, fg_color=ACCENT,
+            hover_color=ACCENT_HOVER, command=self._on_setting_changed,
+        ).pack(anchor="w", padx=24, pady=(8, 4))
 
         ctk.CTkLabel(win, text="// STARTUP", font=self._font_section,
                      text_color=ACCENT).pack(anchor="w", padx=20, pady=(14, 0))
@@ -1003,16 +1080,83 @@ class CountdownApp(ctk.CTk):
 
     # ---------- The tray icon (Windows / Linux only) ----------
 
-    def _make_tray_image(self):
+    def _make_tray_image(self, days_left=None):
         """Draw our tray icon: the real Stray Kids picture if we have it,
-        otherwise a simple red circle so the app still looks finished."""
+        otherwise a simple red circle so the app still looks finished.
+
+        If days_left is given, we also stamp a tiny red LED-style number
+        into the bottom-right corner — the SAME seven-segment digits the
+        big countdown boxes use, just tiny. The app spends almost all of
+        its life living quietly in the tray, never opened — this way you
+        can tell "how many days left?" just by glancing at the tray, with
+        no click required, which is the whole point of living there.
+        """
         if self.skz_logo_source is not None:
-            return self.skz_logo_source.resize((64, 64), Image.LANCZOS)
-        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))  # see-through square
-        d = ImageDraw.Draw(img)
-        d.ellipse([4, 4, 60, 60], fill=ACCENT)       # big red circle
-        d.ellipse([22, 22, 42, 42], fill="#111114")  # dark hole in the middle
-        return img
+            base = self.skz_logo_source.resize((64, 64), Image.LANCZOS).convert("RGBA")
+        else:
+            base = Image.new("RGBA", (64, 64), (0, 0, 0, 0))  # see-through square
+            d = ImageDraw.Draw(base)
+            d.ellipse([4, 4, 60, 60], fill=ACCENT)       # big red circle
+            d.ellipse([22, 22, 42, 42], fill="#111114")  # dark hole in the middle
+
+        if days_left is None or not PIL_AVAILABLE:
+            return base
+
+        base = base.copy()   # don't scribble on the shared logo picture
+        text = str(max(0, min(days_left, 99)))   # keep it to at most 2 digits
+        digit_w, digit_h = 12, 20
+        gap = 2
+        badge_w = len(text) * digit_w + (len(text) - 1) * gap + 6
+        badge_h = digit_h + 6
+        # A small near-black plate behind the digits, so the red LED look
+        # reads clearly no matter what's behind the tray icon (a light
+        # taskbar, a dark one, a busy desktop background through it, ...).
+        badge = Image.new("RGBA", (badge_w, badge_h), (17, 17, 20, 235))
+        x = 3
+        for ch in text:
+            glyph = seven_segment_digit(
+                ch, digit_w * SEG_SUPERSAMPLE, digit_h * SEG_SUPERSAMPLE,
+                ACCENT, "#3A171C",
+            ).resize((digit_w, digit_h), Image.LANCZOS)
+            badge.alpha_composite(glyph, (x, 3))
+            x += digit_w + gap
+        base.alpha_composite(badge, (64 - badge_w - 1, 64 - badge_h - 1))
+        return base
+
+    def _update_tray(self, remaining):
+        """Keep the tray icon's tooltip text AND its little corner number
+        fresh. Together these are the whole point of a tray icon: you
+        should be able to tell how long is left WITHOUT opening the
+        window at all.
+        """
+        if not self.tray_icon:
+            return
+
+        if remaining <= 0:
+            title = f"{TITLE_DISPLAY}: IT'S OUT!"
+            days_left = 0
+        else:
+            total_seconds = int(remaining)
+            _weeks, _days, hours, _minutes, _seconds = split_remaining(total_seconds)
+            days_left = total_seconds // 86400
+            title = f"{days_left}d {hours}h · {TITLE_DISPLAY}"
+
+        if self._last_shown.get("tray_title") != title:
+            self._last_shown["tray_title"] = title
+            try:
+                self.tray_icon.title = title
+            except Exception:
+                pass   # not every tray backend supports live tooltip text
+
+        # Redrawing the little digit picture is a bit more work than just
+        # changing text, so we only do it when the NUMBER actually changes
+        # (at most once a day) instead of on every tick.
+        if self._last_shown.get("tray_days_badge") != days_left:
+            self._last_shown["tray_days_badge"] = days_left
+            try:
+                self.tray_icon.icon = self._make_tray_image(days_left)
+            except Exception:
+                pass   # not every tray backend supports live icon swaps
 
     def _start_tray(self):
         """Put our icon next to the clock, with a right-click menu."""
@@ -1092,6 +1236,7 @@ class CountdownApp(ctk.CTk):
         self.settings["notifications_enabled"] = bool(self.master_switch.get())
         for key, var in self.milestone_vars.items():
             self.settings[key] = bool(var.get())
+        self.settings["auto_open_at_release"] = bool(self.auto_open_var.get())
         save_settings(self.settings)
 
     def _on_startup_toggled(self):
@@ -1165,6 +1310,12 @@ class CountdownApp(ctk.CTk):
         remaining = (RELEASE_DT - now).total_seconds()  # how long is left?
         hidden = self.state() == "withdrawn"          # is the window hidden?
 
+        # Cheap to redo every tick, and keeps the "Your local time" line
+        # correct even if a daylight-saving change happens while this app
+        # has been quietly running in the tray for a while.
+        if not hidden:
+            self._refresh_local_time_label()
+
         if remaining <= 0:
             # THE ALBUM IS OUT! Switch to party mode (but only once).
             if not self._celebrating:
@@ -1185,6 +1336,16 @@ class CountdownApp(ctk.CTk):
                     text=(f'🎉 "{TITLE_DISPLAY}" IS OUT — {FANDOM_NAME}, '
                           'go stream! 🎉'),
                     text_color=ACCENT, font=self._font_celebrate)
+
+                # MAKE THE MOMENT ACTIONABLE: don't just SAY "go stream" —
+                # put the button to actually do it right here, instead of
+                # making someone scroll past it down to "GET THE ALBUM".
+                self.stream_now_btn.grid(row=2, column=0, pady=(16, 0))
+
+                # If they opted in (Settings → "auto-open at release"),
+                # open the stream link for them, once, right now.
+                if self.settings.get("auto_open_at_release", False):
+                    self._open_stream_now()
 
             # POST-RELEASE MODE: once a full day has passed, swap the
             # one-time celebration line for a running "Day N since
@@ -1221,8 +1382,11 @@ class CountdownApp(ctk.CTk):
                     text=f"{day_count} total days remaining",
                     text_color=self.FG_DIM, font=self._font_status)
 
-        # Even when hidden, we still check whether it's time for an alert.
+        # Even when hidden, we still check whether it's time for an alert,
+        # and still keep the tray icon's own tooltip/number fresh — those
+        # are the one thing you CAN still see while the window is hidden.
         self._check_milestones(remaining)
+        self._update_tray(remaining)
 
         delay = TICK_HIDDEN_MS if hidden else TICK_VISIBLE_MS
         self._tick_job = self.after(delay, self._tick)

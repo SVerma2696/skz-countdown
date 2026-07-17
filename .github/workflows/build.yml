@@ -16,8 +16,27 @@ on:
 
 jobs:
 
+  # ---------- Recipe 0: taste-test before baking anything ----------
+  # Runs the pytest suite. The three build jobs below all wait for this
+  # one to finish AND pass (see their "needs: [test]") — so if the
+  # countdown math or milestone logic is broken, GitHub simply won't build
+  # (let alone release) any of the three apps. A broken release literally
+  # cannot get published.
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest
+      - name: Run the test suite
+        run: pytest tests/ -v
+
   # ---------- Recipe 1: bake the Windows app ----------
   build-windows:
+    needs: [test]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,7 +48,7 @@ jobs:
       - name: Make the .ico icon from our logo photo
         run: python -c "from PIL import Image; Image.open('skz-logo.png').save('skz-logo.ico', sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])"
       - name: Build .exe
-        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.ico" --add-data "skz-logo.png;." --add-data "t&t-logo.png;." --add-data "tracklist.png;." --add-data "assets;assets" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.ico" --add-data "skz-logo.png;." --add-data "t&t-logo.png;." --add-data "tracklist.png;." --add-data "release.json;." --add-data "assets;assets" --collect-all customtkinter skz_countdown.py
       - uses: actions/upload-artifact@v7
         with:
           name: SKZ-Countdown-Windows
@@ -37,6 +56,7 @@ jobs:
 
   # ---------- Recipe 2: bake the Mac app ----------
   build-macos:
+    needs: [test]
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
@@ -55,7 +75,7 @@ jobs:
           done
           iconutil -c icns skz.iconset -o skz-logo.icns
       - name: Build .app
-        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.icns" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "SKZ-Countdown" --icon "skz-logo.icns" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "release.json:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
       - name: Zip the .app bundle
         run: cd dist && zip -r SKZ-Countdown-macOS.zip "SKZ-Countdown.app"
       - uses: actions/upload-artifact@v7
@@ -65,6 +85,7 @@ jobs:
 
   # ---------- Recipe 3: bake the Linux app ----------
   build-linux:
+    needs: [test]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -74,7 +95,7 @@ jobs:
       - name: Install dependencies
         run: pip3 install -r requirements.txt pyinstaller
       - name: Build binary
-        run: pyinstaller --onefile --windowed --name "skz-countdown" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
+        run: pyinstaller --onefile --windowed --name "skz-countdown" --add-data "skz-logo.png:." --add-data "t&t-logo.png:." --add-data "tracklist.png:." --add-data "release.json:." --add-data "assets:assets" --collect-all customtkinter skz_countdown.py
       - uses: actions/upload-artifact@v7
         with:
           name: SKZ-Countdown-Linux
