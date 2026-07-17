@@ -11,6 +11,18 @@ file, not hardcoded in the code — so the same app can count down to a
 it doesn't dead-end: it quietly switches to a running "Day N since release"
 counter instead of freezing on a one-time "it's out!" screen.
 
+## 🆕 What's new in v1.6.1
+
+- **Fixed a CI-breaking bug in v1.6.0's own test gate:** on Linux, just
+  *importing* `pystray` (not even using it) tries to connect to a graphical
+  (X11) display immediately — on a headless machine with no display at all
+  (like a GitHub Actions runner, or a Linux box over plain SSH), that raises
+  an `Xlib.error.DisplayNameError` instead of the plain `ImportError` the
+  code was expecting, which crashed the entire app before a window could
+  ever open. Broadened that one `except ImportError` to `except Exception`
+  — no tray icon is a normal, harmless fallback; a surprise crash on import
+  never should have been possible in the first place.
+
 ## 🆕 What's new in v1.6.0
 
 - **Fixed a real timezone bug:** the "Your local time" line used to work
@@ -237,7 +249,7 @@ single-OS project could:
   crisp white console and a near-black one — red stays the one accent color
   either way. Your choice is remembered between launches.
 - **A typed "boot sequence"** in the status bar on launch (`> booting
-  skz-countdown v1.6.0... tz-sync OK... target: 2026-08-07T13:00+09:00
+  skz-countdown v1.6.1... tz-sync OK... target: 2026-08-07T13:00+09:00
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
@@ -452,8 +464,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.6.0
-git push origin v1.6.0
+git tag v1.6.1
+git push origin v1.6.1
 ```
 
 **Tests gate every release.** Before any of the three platform builds start,

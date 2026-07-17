@@ -46,13 +46,22 @@ if not IS_MACOS and PIL_AVAILABLE:
     try:
         import pystray   # noqa: F401  (draws the tray icon)
         TRAY_AVAILABLE = True
-    except ImportError:
-        pass  # no tray toolbox? That's okay, the app still works.
+    except Exception:
+        # Catching more than just ImportError on purpose: on Linux,
+        # pystray tries to connect to a graphical (X11) display THE
+        # MOMENT you import it, not just when you actually use it. On a
+        # machine with no display at all — like a headless CI runner, or
+        # a Linux box run over plain SSH — that raises an
+        # Xlib.error.DisplayNameError instead of a normal ImportError,
+        # which would otherwise crash the ENTIRE app before the window
+        # ever got a chance to open. No tray available is a fine, normal
+        # thing; a surprise crash on import is not.
+        pass
 
 # ---------------- The important facts about the app itself ----------------
 
 APP_NAME = "SKZ Countdown"
-APP_VERSION = "1.6.0"
+APP_VERSION = "1.6.1"
 APP_ID = "skz-countdown"
 
 # The picture file that's ALWAYS the same, no matter which album is loaded
