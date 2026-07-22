@@ -11,6 +11,57 @@ file, not hardcoded in the code — so the same app can count down to a
 it doesn't dead-end: it quietly switches to a running "Day N since release"
 counter instead of freezing on a one-time "it's out!" screen.
 
+A black/white/red "engineering console" look, built around seven-segment
+LED-style countdown digits (with a soft glow on the ticking seconds), a
+typed boot-up line in the status bar, and a switchable **light/dark mode**.
+All 8 members get their own card — click one to read a short bio — and the
+album tracklist and one-click buttons to Spotify, Apple Music, and the Stray
+Kids shop are all here too, plus a "View on GitHub" button back to this page.
+
+Runs on **Windows, macOS, and Linux** (Python + CustomTkinter).
+
+---
+
+# 📥 How to Download
+
+### ⭐ Just want the app? (no coding needed)
+
+**[⬇ Click here to download the latest version](https://github.com/SVerma2696/skz-countdown/releases/latest)**
+
+1. Scroll down to the **Assets** section
+2. Click the file for your computer:
+
+| Your computer | Download this | Then do this |
+|---|---|---|
+| 🪟 **Windows** | `SKZ-Countdown.exe` | Double-click it. That's it — no install needed. |
+| 🍎 **Mac** | `SKZ-Countdown-macOS.zip` | Unzip it → drag the app into **Applications** → the **first time only**, right-click the app and choose **Open** |
+| 🐧 **Linux** | `skz-countdown` | Open a terminal where you saved it and run: `chmod +x skz-countdown && ./skz-countdown` |
+
+> 🪟 **Windows will warn you the first time** ("Windows protected your PC").
+> This just means the app isn't signed with a paid certificate — normal for
+> free indie apps. Click **More info → Run anyway**. See
+> [Getting your computer to trust the app](#-getting-your-computer-to-trust-the-app)
+> below for Windows, macOS, and Linux details.
+
+### 💻 Want the source code instead? (for developers)
+
+1. Click the green **`<> Code`** button at the top of this page
+2. Choose **Download ZIP** (or run `git clone https://github.com/SVerma2696/skz-countdown.git`)
+3. Unzip, open a terminal in the folder, and run:
+
+```bash
+pip install -r requirements.txt
+python skz_countdown.py
+```
+
+---
+
+## 🆕 What's new in v1.6.4
+
+- Moved this changelog below the **How to Download** section — someone
+  landing on this page wants "how do I get it" before "what changed
+  recently," so the download instructions now come first.
+
 ## 🆕 What's new in v1.6.3
 
 - **The release moment was actually watched happen, live, for the first
@@ -140,51 +191,6 @@ counter instead of freezing on a one-time "it's out!" screen.
   file into a handful of focused ones under `skz_countdown_pkg/` — see
   [Project layout](#-project-layout).
 
-A black/white/red "engineering console" look, built around seven-segment
-LED-style countdown digits (with a soft glow on the ticking seconds), a
-typed boot-up line in the status bar, and a switchable **light/dark mode**.
-All 8 members get their own card — click one to read a short bio — and the
-album tracklist and one-click buttons to Spotify, Apple Music, and the Stray
-Kids shop are all here too, plus a "View on GitHub" button back to this page.
-
-Runs on **Windows, macOS, and Linux** (Python + CustomTkinter).
-
----
-
-# 📥 How to Download
-
-### ⭐ Just want the app? (no coding needed)
-
-**[⬇ Click here to download the latest version](https://github.com/SVerma2696/skz-countdown/releases/latest)**
-
-1. Scroll down to the **Assets** section
-2. Click the file for your computer:
-
-| Your computer | Download this | Then do this |
-|---|---|---|
-| 🪟 **Windows** | `SKZ-Countdown.exe` | Double-click it. That's it — no install needed. |
-| 🍎 **Mac** | `SKZ-Countdown-macOS.zip` | Unzip it → drag the app into **Applications** → the **first time only**, right-click the app and choose **Open** |
-| 🐧 **Linux** | `skz-countdown` | Open a terminal where you saved it and run: `chmod +x skz-countdown && ./skz-countdown` |
-
-> 🪟 **Windows will warn you the first time** ("Windows protected your PC").
-> This just means the app isn't signed with a paid certificate — normal for
-> free indie apps. Click **More info → Run anyway**. See
-> [Getting your computer to trust the app](#-getting-your-computer-to-trust-the-app)
-> below for Windows, macOS, and Linux details.
-
-### 💻 Want the source code instead? (for developers)
-
-1. Click the green **`<> Code`** button at the top of this page
-2. Choose **Download ZIP** (or run `git clone https://github.com/SVerma2696/skz-countdown.git`)
-3. Unzip, open a terminal in the folder, and run:
-
-```bash
-pip install -r requirements.txt
-python skz_countdown.py
-```
-
----
-
 ## 🛠️ Built With
 
 | Layer | Technology |
@@ -290,7 +296,7 @@ single-OS project could:
   crisp white console and a near-black one — red stays the one accent color
   either way. Your choice is remembered between launches.
 - **A typed "boot sequence"** in the status bar on launch (`> booting
-  skz-countdown v1.6.3... tz-sync OK... target: 2026-08-07T13:00+09:00
+  skz-countdown v1.6.4... tz-sync OK... target: 2026-08-07T13:00+09:00
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
@@ -505,8 +511,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.6.3
-git push origin v1.6.3
+git tag v1.6.4
+git push origin v1.6.4
 ```
 
 **Tests gate every release.** Before any of the three platform builds start,
