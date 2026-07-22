@@ -1315,10 +1315,31 @@ class CountdownApp(ctk.CTk):
           * We only repaint a number if it actually changed.
           * While the window is hidden, we slow down to one check every
             15 seconds (nobody can see the seconds anyway).
+
+        SAFETY NET: the very last thing this function does is schedule
+        the NEXT tick — so if anything above that line ever raises a
+        surprise error, the countdown clock would just... stop. Forever.
+        Silently. No more digit updates, no more alerts, nothing — until
+        someone restarts the app. That's a much worse failure than
+        whatever the original error was, so the whole body below is
+        wrapped in a try/finally: no matter what goes wrong inside, the
+        NEXT tick always still gets scheduled.
         """
+        hidden = self.state() == "withdrawn"          # is the window hidden?
+        try:
+            self._tick_body(hidden)
+        except Exception:
+            pass   # see the big comment above — never let this loop die
+        finally:
+            delay = TICK_HIDDEN_MS if hidden else TICK_VISIBLE_MS
+            self._tick_job = self.after(delay, self._tick)
+
+    def _tick_body(self, hidden):
+        """The actual work _tick() does every time it fires — split into
+        its own method just so the try/finally safety net above can wrap
+        ALL of it in one place, cleanly."""
         now = datetime.now(timezone.utc)              # what time is it NOW?
         remaining = (RELEASE_DT - now).total_seconds()  # how long is left?
-        hidden = self.state() == "withdrawn"          # is the window hidden?
 
         # Cheap to redo every tick, and keeps the "Your local time" line
         # correct even if a daylight-saving change happens while this app
@@ -1397,9 +1418,6 @@ class CountdownApp(ctk.CTk):
         # are the one thing you CAN still see while the window is hidden.
         self._check_milestones(remaining)
         self._update_tray(remaining)
-
-        delay = TICK_HIDDEN_MS if hidden else TICK_VISIBLE_MS
-        self._tick_job = self.after(delay, self._tick)
 
     # ---------- Deciding when to send the big alerts ----------
 

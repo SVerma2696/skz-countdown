@@ -11,6 +11,29 @@ file, not hardcoded in the code — so the same app can count down to a
 it doesn't dead-end: it quietly switches to a running "Day N since release"
 counter instead of freezing on a one-time "it's out!" screen.
 
+## 🆕 What's new in v1.6.3
+
+- **The release moment was actually watched happen, live, for the first
+  time:** `release.json` was pointed at a real moment 2 minutes in the
+  future, the real app was launched, and the countdown was watched cross
+  zero — digits flipping to `00000`, the celebration message and "▶ Stream
+  now" button appearing, the tray tooltip flipping from `"0d 0h · This &
+  That"` to `"This & That: IT'S OUT!"`, and the release notification firing
+  exactly once (confirmed by intercepting and counting every call, not just
+  eyeballing it). This is the one path pytest fundamentally can't cover —
+  it only exists once the real event loop, the real clock, and the real
+  notification system are all running together.
+- **That live run found a real bug, and it's fixed:** `_tick()` had no
+  safety net. It's a self-rescheduling loop — the very last line of the
+  function is what queues up the *next* tick — so if literally anything
+  earlier in the function ever raised an unexpected error, the entire
+  countdown would silently stop ticking forever: no more digit updates, no
+  more alerts, nothing, with no visible error (a `--windowed` build has no
+  console for a stray traceback to even appear on). `_tick()` now wraps its
+  work in a `try/finally`, so the next tick is *always* scheduled no matter
+  what happens inside — matching the "a failed X should never crash the
+  countdown" rule the rest of the app already follows everywhere else.
+
 ## 🆕 What's new in v1.6.2
 
 - **Fixed: sending a test notification (or any Windows toast) could flash a
@@ -267,7 +290,7 @@ single-OS project could:
   crisp white console and a near-black one — red stays the one accent color
   either way. Your choice is remembered between launches.
 - **A typed "boot sequence"** in the status bar on launch (`> booting
-  skz-countdown v1.6.2... tz-sync OK... target: 2026-08-07T13:00+09:00
+  skz-countdown v1.6.3... tz-sync OK... target: 2026-08-07T13:00+09:00
   [LOCKED]`), finishing with a softly blinking cursor.
 - **8 members, click one to learn more:** every member's card is always lit
   up; hovering one highlights it in red and flips its tag to a little status
@@ -482,8 +505,8 @@ You don't need a Mac or Linux machine — the included workflow at
 the repo to GitHub, cut a release like this:
 
 ```bash
-git tag v1.6.2
-git push origin v1.6.2
+git tag v1.6.3
+git push origin v1.6.3
 ```
 
 **Tests gate every release.** Before any of the three platform builds start,
